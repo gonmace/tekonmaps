@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+
+  django:
+    build: .
+    container_name: Django
+    ports:
+    - 8008:8000
+    volumes:
+    - .:/app
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:14.3-alpine3.16
+    container_name: postgres
+    ports:
+      - 5431:5432
+    environment:
+      - POSTGRES_DB=base
+      - POSTGRES_USER=magoreal
+      - POSTGRES_PASSWORD=ojalaque
+    volumes:
+      - ./database:/var/lib/postgresql/data
+
+  pgadmin:
+    container_name: pgadmin4_container
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: 'magoreal4@gmail.com'
+      PGADMIN_DEFAULT_PASSWORD: 'ojalaque'
+    ports:
+      - "5050:80"
+
+  # rabbitmq:
+  #   image: "rabbitmq:alpine"
+  #   container_name: rabbitmq
+  #   healthcheck:
+  #     test: rabbitmq-diagnostics -q ping
+  #     interval: 30s
+  #     timeout: 30s
+  #     retries: 3
+
+  # redis:
+  #   image: redis:7
+  #   container_name: redis
+  #   ports:
+  #     - 6379:6379
+  #   volumes:
+  #     - redis-data:/data
+
+
+# volumes:
+#     postgres-data:
+#     redis-data:
+

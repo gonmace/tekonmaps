@@ -1,0 +1,9 @@
+-r base.txt
+psycopg2-binary==2.9.9
+
+# # Django
+# # ------------------------------------------------------------------------------
+# django-debug-toolbar==4.2.0  # https://github.com/jazzband/django-debug-toolbar
+# django-extensions==3.2.3  # https://github.com/django-extensions/django-extensions
+# django-browser-reload==1.12.0 # https://github.com/django-browser-reload/django-browser-reload
+# ipython==8.17.2 # https://ipython.org
