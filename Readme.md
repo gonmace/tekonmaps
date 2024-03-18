@@ -21,7 +21,7 @@ gunicorn config.wsgi:application --bind 127.0.0.1:8000
 ```
 
 
-
+sudo apt-get install -y jq
 
 
 

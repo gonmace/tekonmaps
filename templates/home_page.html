@@ -1,0 +1,45 @@
+
+
+{% extends "base.html" %}
+{% load static %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static './leaflet/leaflet.css' %}" />
+<link rel="stylesheet" href="{% static './leaflet/MarkerCluster.css' %}" />
+<link rel="stylesheet" href="{% static './leaflet/MarkerCluster.Default.css' %}" />
+{% endblock css %}
+
+{% block body_class %}bg-yellow-500{% endblock %}
+
+{% block header %} 
+    {% include "header.html" %}  
+{% endblock header %}
+    
+{% block content %} 
+<div class="bg-yellow-300 mt-28  "> 
+Hola como estas
+
+</div>
+
+    <!-- Mapa -->
+    <div id="map" class="h-screen max-w-full"> 
+    </div>
+ 
+{% endblock content %}
+
+{% block extra_js %}
+<script type="text/javascript">
+	var auth = "{{request.user.is_authenticated}}";
+	var static_url = "{% get_static_prefix %}";
+	var csrft = "{{ csrf_token }}";
+	var debug = "{{ debug }}";
+	auth == 'True' ? auth = true : auth = false;
+	debug == 'True' ? debug = true : debug = false;
+	var sitios = {{ sitios|safe }};
+
+  </script>
+
+
+{% comment %} <script type="text/javascript" src="{% static './js/main.js' %}"></script> {% endcomment %}
+
+{% endblock extra_js %}

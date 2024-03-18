@@ -1,5 +1,6 @@
 from .base import *
 import os
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
@@ -11,17 +12,17 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS += [
     # "django_extensions",
-    # 'django_browser_reload',
+    'django_browser_reload',
     # "debug_toolbar",
     ]  
 
 MIDDLEWARE += [
     # "debug_toolbar.middleware.DebugToolbarMiddleware",
-    # "django_browser_reload.middleware.BrowserReloadMiddleware",
+    "django_browser_reload.middleware.BrowserReloadMiddleware",
     ]  
 
 INTERNAL_IPS = [
-    # "127.0.0.1",
+    "127.0.0.1",
 ]
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
