@@ -3,23 +3,20 @@
 {% extends "base.html" %}
 {% load static %}
 
+
 {% block css %}
 <link rel="stylesheet" href="{% static './leaflet/leaflet.css' %}" />
 <link rel="stylesheet" href="{% static './leaflet/MarkerCluster.css' %}" />
 <link rel="stylesheet" href="{% static './leaflet/MarkerCluster.Default.css' %}" />
 {% endblock css %}
 
-{% block body_class %}bg-yellow-500{% endblock %}
+{% block body_class %}{% endblock %}
 
 {% block header %} 
     {% include "header.html" %}  
 {% endblock header %}
     
 {% block content %} 
-<div class="bg-yellow-300 mt-28  "> 
-Hola como estas
-
-</div>
 
     <!-- Mapa -->
     <div id="map" class="h-screen max-w-full"> 
@@ -40,6 +37,6 @@ Hola como estas
   </script>
 
 
-{% comment %} <script type="text/javascript" src="{% static './js/main.js' %}"></script> {% endcomment %}
+<script type="text/javascript" src="{% static './js/main.js' %}"></script>
 
 {% endblock extra_js %}

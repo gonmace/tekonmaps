@@ -13,5 +13,12 @@
   "license": "ISC",
   "devDependencies": {
     "vite": "^5.1.6"
+  },
+  "dependencies": {
+    "leaflet": "^1.7.1",
+    "leaflet-control-custom": "^1.0.0",
+    "leaflet-groupedlayercontrol": "^0.6.1",
+    "leaflet.markercluster": "^1.5.3",
+    "leaflet.markercluster.layersupport": "^2.0.1"
   }
 }

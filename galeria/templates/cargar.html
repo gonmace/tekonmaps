@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% load widget_tweaks %}
+
+{% block css %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <!-- Incluir JavaScript de Flatpickr -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+{% endblock css %}
+
+{% block content %} 
+  <div class="w-full max-w-7xl mx-auto px-4 py-6">
+    <!-- Título del formulario -->
+    <div class="text-center mb-8">
+      <h1 class="text-2xl font-bold text-gray-800">CARGA DE IMAGENES</h1>
+      <p class="text-md text-gray-500">Escoge el sitio para la carga de multiples imagenes.</p>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="space-y-4 bg-white p-6 rounded-lg shadow-lg">
+        {% csrf_token %}
+        {% for field in form %}
+            <div class="mb-4">
+                <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700">{{ field.label }}</label>
+                {{ field|add_class:"mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" }}
+                {% if field.help_text %}
+                    <p class="mt-2 text-sm text-gray-500">{{ field.help_text }}</p>
+                {% endif %}
+                {% for error in field.errors %}
+                    <p class="text-sm text-red-600">{{ error }}</p>
+                {% endfor %}
+            </div>
+        {% endfor %}
+            <input type="file" name="images" multiple class="form-control">
+            <div>
+                <button type="submit" class="px-4 py-2 mt-2 bg-blue-500 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                Cargar imagenes
+            </div>
+        </button>
+    </form>
+  </div>
+
+{% endblock content %} 
+
+{% block extra_js %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            flatpickr('.datepicker', {
+                dateFormat: "d/m/Y",
+            });
+        });
+    </script>
+{% endblock extra_js %}
+

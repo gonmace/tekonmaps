@@ -1,2 +1,5 @@
 Django>=4.2,<4.3
 python-dotenv==1.0.1
+django-tailwind==3.8.0
+django-import-export==3.3.7
+django-photologue==3.17

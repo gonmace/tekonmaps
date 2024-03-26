@@ -1,6 +1,7 @@
 
 from pathlib import Path
 from dotenv import load_dotenv
+import os
 
 DEBUG = True
 
@@ -8,19 +9,6 @@ DEBUG = True
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 load_dotenv(Path.joinpath(BASE_DIR, '.env'))
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-# TODO SECRET_KEY = 'django-insecure--c(r%)l&olmz84c^+b9k4fm_!m_51!%2i2@$mf1h(=+g6#v2ar'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-# TODO DEBUG = True
-
-# TODO ALLOWED_HOSTS = []
-
-
-# Application definition
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -29,12 +17,24 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',
 
     'main',
+    'galeria.apps.GaleriaConfig',
 
     'tailwind',
     'theme',
+    'import_export',
+    'widget_tweaks',
+    # "crispy_forms",                     # new
+    # "crispy_tailwind",                  # new
+    # 'photologue',
+    # 'sortedm2m',
 ]
+
+CRISPY_ALLOWED_TEMPLATE_PACKS = "tailwind"
+
+CRISPY_TEMPLATE_PACK = "tailwind"
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -46,6 +46,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+SITE_ID = 1
 
 TAILWIND_APP_NAME = 'theme'
 
@@ -56,7 +57,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
+        'DIRS': [os.path.join(BASE_DIR / 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -108,9 +109,17 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-STATICFILES_DIRS = [BASE_DIR, 'static' ]
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static'), ]
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+MEDIA_URL = '/media/'
+
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# APPEND_SLASH = True

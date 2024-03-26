@@ -21,12 +21,12 @@ from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('main.urls')),
+    path('imgs/', include('galeria.urls')),
+    # path('galeria/', include(('photologue.urls', 'photologue'), namespace='photologue')),
     ]
 
 if settings.DEBUG:
-    urlpatterns += [
-        path("__reload__/", include("django_browser_reload.urls"))
-        ]
+    urlpatterns += [path("__reload__/", include("django_browser_reload.urls"))]
 
 
 urlpatterns += staticfiles_urlpatterns()
