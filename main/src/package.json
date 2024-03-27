@@ -1,7 +1,6 @@
 {
   "name": "src",
   "version": "1.0.0",
-  "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -12,7 +11,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "vite": "^5.1.6"
+    "vite": "^5.2.6"
   },
   "dependencies": {
     "leaflet": "^1.7.1",
@@ -20,5 +19,6 @@
     "leaflet-groupedlayercontrol": "^0.6.1",
     "leaflet.markercluster": "^1.5.3",
     "leaflet.markercluster.layersupport": "^2.0.1"
-  }
+  },
+  "description": ""
 }

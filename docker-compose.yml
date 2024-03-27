@@ -3,16 +3,17 @@ version: "3.9"
 services:
 
   django:
-    build: .
     container_name: Django
+    build: .
+    restart: always
     ports:
-    - 8008:8000
+    - 8000:8000
     volumes:
-    - .:/app
+    - ./:/app
     depends_on:
-      - postgres
+      - db
 
-  postgres:
+  db:
     image: postgres:14.3-alpine3.16
     container_name: postgres
     ports:
@@ -22,17 +23,27 @@ services:
       - POSTGRES_USER=magoreal
       - POSTGRES_PASSWORD=ojalaque
     volumes:
-      - ./database:/var/lib/postgresql/data
+      - ./db:/var/lib/postgresql/data
 
-  pgadmin:
-    container_name: pgadmin4_container
-    image: dpage/pgadmin4
+  nginx:
+    build: ./nginx
     restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: 'magoreal4@gmail.com'
-      PGADMIN_DEFAULT_PASSWORD: 'ojalaque'
     ports:
-      - "5050:80"
+      - 80:80
+    volumes:
+      - ./:/app
+    depends_on:
+      - django
+
+  # pgadmin:
+  #   container_name: pgadmin4_container
+  #   image: dpage/pgadmin4
+  #   restart: always
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: 'magoreal4@gmail.com'
+  #     PGADMIN_DEFAULT_PASSWORD: 'ojalaque'
+  #   ports:
+  #     - "5050:80"
 
   # rabbitmq:
   #   image: "rabbitmq:alpine"

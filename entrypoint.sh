@@ -1,7 +1,7 @@
 #!/bin/sh
 
 echo 'Running collectstatic...'
-python manage.py collectstatic --no-input --settings=config.settings.prod
+python manage.py collectstatic --noinput --settings=config.settings.prod
 
 echo 'Running migrations...'
 python manage.py migrate --settings=config.settings.prod

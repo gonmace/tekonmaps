@@ -5,9 +5,9 @@
 
 
 {% block css %}
-<link rel="stylesheet" href="{% static './leaflet/leaflet.css' %}" />
-<link rel="stylesheet" href="{% static './leaflet/MarkerCluster.css' %}" />
-<link rel="stylesheet" href="{% static './leaflet/MarkerCluster.Default.css' %}" />
+{% comment %} <link rel="stylesheet" href="{% static './leaflet/leaflet.css' %}" /> {% endcomment %} 
+{% comment %} <link rel="stylesheet" href="{% static './leaflet/MarkerCluster.css' %}" />
+<link rel="stylesheet" href="{% static './leaflet/MarkerCluster.Default.css' %}" /> {% endcomment %}
 {% endblock css %}
 
 {% block body_class %}{% endblock %}
@@ -37,6 +37,6 @@
   </script>
 
 
-<script type="text/javascript" src="{% static './js/main.js' %}"></script>
+<script type="text/javascript" src="{% static 'js/main.js' %}"></script>
 
 {% endblock extra_js %}
