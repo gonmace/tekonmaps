@@ -314,3 +314,4 @@ data/
 .vscode/
 db/
 staticfiles/
+.env.sample
