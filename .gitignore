@@ -313,3 +313,4 @@ dist
 data/
 .vscode/
 db/
+staticfiles/
