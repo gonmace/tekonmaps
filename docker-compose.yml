@@ -25,15 +25,15 @@ services:
     volumes:
       - ./db:/var/lib/postgresql/data
 
-  nginx:
-    build: ./nginx
-    restart: always
-    ports:
-      - 80:80
-    volumes:
-      - ./:/app
-    depends_on:
-      - django
+  # nginx:
+  #   build: ./nginx
+  #   restart: always
+  #   ports:
+  #     - 80:80
+  #   volumes:
+  #     - ./:/app
+  #   depends_on:
+  #     - django
 
   # pgadmin:
   #   container_name: pgadmin4_container
