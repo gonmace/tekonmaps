@@ -1,7 +1,7 @@
 # nginx/nginx.conf
 
 upstream web_app {
-    server django:8000;
+    server localhost:8008;
 }
 
 server {

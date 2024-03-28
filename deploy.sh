@@ -3,11 +3,12 @@
 
 read -p "Nombre de la App: " app
 read -p "Dominio: " dominio
-cat > ${app}.conf <<EOF
+read -p "Puerto: " puerto
+cat > ${app} <<EOF
 # /etc/nginx/sites-available/$app
 
 upstream web_$app {
-    server django:8000;
+    server django:$puerto;
 }
 server {
     server_name $dominio www.${dominio};
@@ -19,37 +20,58 @@ server {
 
     location /static/ {
         autoindex on;
-        alias /app/staticfiles/;
+        alias $PWD/staticfiles/;
         }
     
     location /media/ {
         autoindex on;
-        alias /app/media/;
+        alias $PWD/media/;
         }
 
     location / {
-        proxy_pass http://web_app;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header Host $host;
+        proxy_pass http://web_$app;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header Host \$host;
         proxy_redirect off;    
         }
 }
 EOF
 
-sudo cp $app.conf ./nginx/
+cat > docker-compose.yml <<EOF
+version: "3.9"
 
-cat > ./nginx/Dockerfile <<EOF
-# nginx/Dockerfile
+services:
 
-# FROM nginx:stable-alpine
-# RUN rm /etc/nginx/conf.d/default.conf
-# COPY nginx.conf /etc/nginx/conf.d
-# EXPOSE 80
-sudo cp $app.conf /etc/nginx/sites-available/$app.conf
-sudo ln -s /etc/nginx/sites-available/$app.conf /etc/nginx/sites-enabled/$app.conf
-nginx -t
+  django:
+    container_name: Django
+    build: .
+    restart: always
+    ports:
+    - $puerto:8000
+    volumes:
+    - ./:/app
+    depends_on:
+      - db
+
+  db:
+    image: postgres:14.3-alpine3.16
+    container_name: postgres
+    ports:
+      - 5431:5432
+    environment:
+      - POSTGRES_DB=base
+      - POSTGRES_USER=magoreal
+      - POSTGRES_PASSWORD=ojalaque
+    volumes:
+      - ./db:/var/lib/postgresql/data
 EOF
 
-sudo docker-compose up -d --build
+sudo mv .env.sample .env
+sudo cp $app /etc/nginx/sites-available/$app
+sudo ln -s /etc/nginx/sites-available/$app /etc/nginx/sites-enabled/$app
+nginx -t
+
+
+# sudo docker-compose up -d --build
 
 exit
