@@ -312,6 +312,7 @@ dist
 
 data/
 .vscode/
-# db/
+db/
 staticfiles/
+media/
 

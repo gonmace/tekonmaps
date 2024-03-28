@@ -38,7 +38,7 @@ sudo docker-compose exec django python manage.py createsuperuser --settings=conf
 
 # Importar los datos
 sudo docker-compose exec django python manage.py migrate --settings=config.settings.prod
-sudo docker cp datos.json 37969c057d2a:/app/datos.json
+sudo docker cp datos.json 4d3d20e2a2f4:/app/datos.json
 <!-- sudo docker-compose exec django python manage.py remove_stale_contenttypes --settings=config.settings.prod -->
 sudo docker-compose exec django python manage.py loaddata /app/datos.json --settings=config.settings.prod
 
