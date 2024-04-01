@@ -48,7 +48,7 @@ def fileupload(request):
 
             # Crear y guardar el comentario si existe alguno
             if comentario_texto:  # Verificar si hay algún comentario para guardar
-                Comentario.objects.create(galeria=galeria, comentario=comentario_texto, fecha_carga=fecha_carga)
+                Comentario.objects.create(galeria=galeria, comentario=comentario_texto, fecha_carga=fecha_carga, usuario=request.user)
 
             # Añadir un mensaje de éxito
             messages.success(request, "Imágenes cargadas correctamente.")
