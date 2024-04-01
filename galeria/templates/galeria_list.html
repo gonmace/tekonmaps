@@ -26,8 +26,8 @@
                         </div>
                     {% endif %}
                     <div class="px-4">
-                        <h2 class="text-lg font-bold text-gray-900">{{ galeria.sitio }}</h2>
-                        <p class="text-gray-700">{{ galeria.descripcion|truncatewords:20 }}</p>
+                        <h2 class="text-lg font-bold text-gray-900">{{ galeria.sitio }}_{{ galeria.entel_id }}</h2>
+                        <p class="text-gray-700">{{ galeria.nombre }} {{ galeria.descripcion|truncatewords:20 }}</p>
                     </div>
                 </div>
             </a>
