@@ -7,7 +7,7 @@
 {% if messages %}
 <ul class="messages">
     {% for message in messages %}
-    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+    <li{% if message.tags %} class="text-red-600 {{ message.tags }}"{% endif %}>{{ message }}</li>
     {% endfor %}
 </ul>
 {% endif %}
@@ -35,4 +35,12 @@
     </div>
 </div>
 
+<!-- Botón Ir a Cargar, colocado en la parte superior derecha -->
+{% if user.is_authenticated %}
+<div class="absolute top-0 right-0 m-4">
+    <a href="{% url 'galeria:cargar_imagenes' %}" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        Cargar Imagenes
+    </a>
+</div>
+{% endif %}
 {% endblock content %}
