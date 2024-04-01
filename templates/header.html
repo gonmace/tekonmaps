@@ -1,11 +1,18 @@
 
 {% load static %} 
 <header class="absolute top-0 left-0 right-0 px-2 sm:px-4 py-2.5 z-[999] bg-white/30 backdrop-blur-md shadow-lg">
-    <nav class="">
-        <div class="max-w-7xl flex flex-wrap justify-between items-center mx-auto">
-            <!-- Logo -->
-            <img src="{% static 'img/logo-tekon.png' %}" alt="Logo" class="mr-3 h-10 sombra">
-
+    <nav class="flex max-w-7xl justify-between">
+        <div>
+            <img src="{% static 'img/logo-tekon.png' %}" alt="Logo" class="ml-10 text-left h-10 sombra">
+        </div>
+        <div class="relative bg-yellow-200"> <!-- Contenedor relativo para el input y el ul -->
+            <input type="text" class="z-50 w-full" id="buscador" placeholder="Buscar sitio..."> <!-- Asegúrate de que el input ocupe el ancho completo del contenedor con w-full -->
+            <ul id="resultados" class="absolute z-50 w-full divide-y bg-white divide-gray-500"> <!-- Posición absoluta y ancho completo, añadido dividir-y para líneas entre elementos -->
+                <!-- Los elementos li heredarán el ancho del ul, con borde inferior excepto el último elemento -->
+                <!-- Repite el elemento <li> según sea necesario, la clase last:border-b-0 ya no es necesaria debido a divide-y -->
+            </ul>
         </div>
     </nav>
 </header>
+
+

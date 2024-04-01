@@ -5,9 +5,6 @@
 
 
 {% block css %}
-{% comment %} <link rel="stylesheet" href="{% static './leaflet/leaflet.css' %}" /> {% endcomment %} 
-{% comment %} <link rel="stylesheet" href="{% static './leaflet/MarkerCluster.css' %}" />
-<link rel="stylesheet" href="{% static './leaflet/MarkerCluster.Default.css' %}" /> {% endcomment %}
 {% endblock css %}
 
 {% block body_class %}{% endblock %}
@@ -16,12 +13,8 @@
     {% include "header.html" %}  
 {% endblock header %}
     
-{% block content %} 
-
-    <!-- Mapa -->
-    <div id="map" class="h-screen max-w-full"> 
-    </div>
- 
+{% block content %}
+    <div id="map" class="h-screen max-w-full"> </div>	
 {% endblock content %}
 
 {% block extra_js %}
@@ -31,9 +24,9 @@
 	var csrft = "{{ csrf_token }}";
 	var debug = "{{ debug }}";
 	auth == 'True' ? auth = true : auth = false;
-	debug == 'True' ? debug = true : debug = false;
+	debug == 'True' ? debug = true : debug = false; 
 	var sitios = {{ sitios|safe }};
-
+	console.log(sitios)
   </script>
 
 

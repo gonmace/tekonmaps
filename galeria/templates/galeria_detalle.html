@@ -2,24 +2,37 @@
 {% extends 'base.html' %}
 
 {% block content %}
-   <h1 class="text-center text-3xl font-bold text-gray-800 mb-1">{{ galeria.nombre }}</h1>
-    <p class="text-center text-2xl text-gray-600 ">{{ galeria.descripcion }}</p>
-          
-            {% for fecha, imagenes in imagenes_por_fecha.items %}
-                {% with day=fecha|date:"l" %}
-                <h2 class="{% if day == "sábado" or day == "domingo" %}text-red-500{% else %}text-gray-700{% endif %} text-xl font-semibold mb-0">
-                    {{ fecha|date:"j F  Y (l)" }}
-                </h2>
-                {% endwith %}
-                
-                <div class="columns-3 gap-4 my-3 mx-2">    
-                {% for imagen in imagenes %}
+<h1 class="text-center text-3xl font-bold text-gray-800 mb-1">{{ galeria.sitio }}_{{ galeria.entel_id }} </h1>
+<p class="text-center text-2xl text-gray-600 ">{{ galeria.nombre }} {{ galeria.descripcion }}</p>
+      
+{% for fecha, items in items_por_fecha.items %}
+    {% with day=fecha|date:"l" %}
+    <h2 class="{% if day == "sábado" or day == "domingo" %}text-red-500{% else %}text-gray-700{% endif %} text-xl font-semibold mb-0 ml-1">
+        {{ fecha|date:"j F Y (l)" }}
+    </h2>
+    {% endwith %}
+    
+    <!-- Mostrar imágenes de ese día -->
+    <div class="columns-3 gap-4 my-3 mx-2">    
+    {% for imagen in items.imagenes %}
+        <img class="h-auto max-w-full rounded-lg my-3" src="{{ imagen.imagen.url }}" alt="{{ imagen.descripcion }}" >
+    {% endfor %}
 
-                    <img class="h-auto max-w-full rounded-lg my-3" src="{{ imagen.imagen.url }}" alt="{{ imagen.descripcion }}" >
+    <!-- Verificar y Mostrar comentarios de ese día si existen -->
+    {% if items.comentarios %}   
+        {% for comentario in items.comentarios %}
+        <div class="bg-yellow-200 w-full min-h-14 flex flex-col justify-between rounded-lg p-4">
+            <p class="mb-4">{{ comentario.comentario }}</p>
+            <div class="text-right text-sm text-gray-600">
+                {{ comentario.usuario }}
+            </div>
+        </div>       
+        {% endfor %}
+    {% endif %}
 
-                {% endfor %}
-                </div>
-            {% endfor %}
-        
     </div>
+    
+
+{% endfor %}
+
 {% endblock content %}

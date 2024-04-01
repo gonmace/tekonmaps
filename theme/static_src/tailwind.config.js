@@ -5,6 +5,7 @@ module.exports = {
         '../../main/src/index-main.js',
         '../../**/templates/*.html',  
         '!../../**/node_modules',
+        '../../**/src/*.js',
         /* JS 1: Ignore any JavaScript in node_modules folder. */
         // '!../../**/node_modules',
         /* JS 2: Process all JavaScript files in the project. */
