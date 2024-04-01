@@ -48,9 +48,6 @@ var grayIcon = L.icon({
   popupAnchor: [1, -34] 
 });
 
-
-
-
     var opacidad = 1;
 
     // Definición de capas de tiles
@@ -108,7 +105,7 @@ var mcgLayerSupportGroup = L.markerClusterGroup.layerSupport({
     // Control de capas
     var control = L.control.layers({
       'OpenStreetMap': OpenStreetMap_Mapnik,
-      'OpenStreetMap_Dark': OpenStreetMap_Dark,
+      // 'OpenStreetMap_Dark': OpenStreetMap_Dark,
       'Esri_WorldImagery': Esri_WorldImagery
     }, {
       'AJ': ajgroup,
@@ -123,13 +120,13 @@ var mcgLayerSupportGroup = L.markerClusterGroup.layerSupport({
     sitios.forEach(e => {
 
       let selectedIcon;
-      if (e['estado'] === 'ASG') {
+      if (e['avance__estado'] === 'ASG') {
         selectedIcon = yellowIcon;
-      } else if (e['estado'] === 'EJE') {
+      } else if (e['avance__estado'] === 'EJE') {
         selectedIcon = greenIcon;
-      } else if (e['estado'] === 'PTG') {
+      } else if (e['avance__estado'] === 'PTG') {
         selectedIcon = grayIcon;
-      } else if (e['estado'] === 'CAN') {
+      } else if (e['avance__estado'] === 'CAN') {
         selectedIcon = redIcon;
       } else {
         selectedIcon = blueIcon;
@@ -137,56 +134,147 @@ var mcgLayerSupportGroup = L.markerClusterGroup.layerSupport({
 
       var marker = L.marker([e['lat'], e['lon']], {
         icon: selectedIcon, // Asegúrate de que selectedIcon esté definido
-        title: e['comuna'],
+        title: e['sitio'] + '_' + e['entel_id'],
         contratista: e.contratista // Asegúrate de tener esta propiedad en tus datos
       });
 
-      marker.bindTooltip(e['cod'], {permanent: true}).openTooltip();
+      marker.bindTooltip(e['nombre'], {permanent: false});
+// Ahcer que el tolltip solo se vea en el zoom 9 o mas
+      function updateTooltipsBasedOnZoom() {
+        var currentZoom = map.getZoom();
+        allMarkers.forEach(function(marker) {
+            if (currentZoom > 9) {
+                marker.openTooltip();
+            } else {
+                marker.closeTooltip();
+            }
+        });
+    }
+    
+    // Inicialmente actualiza los tooltips basándose en el zoom actual
+    updateTooltipsBasedOnZoom();
+    
+    // Añade un listener para actualizar los tooltips cada vez que el zoom cambia
+    map.on('zoomend', function() {
+        updateTooltipsBasedOnZoom();
+    });
+    
 
     // Definiendo las rutas a los íconos
     var checkIconPath = static_url+'img/check.png';
     var crossIconPath = static_url+'img/cross.png';
 
-    var progressValue = e['avance']; // Este es el valor de progreso. Reemplázalo con tu valor dinámico
+    var excavado = e['avance__excavacion'] === '' ? false : true;
+    if (e['avance__excavacion']) {
+      var partesDeFecha = e['avance__excavacion'].split('-'); // Separar YYYY, MM, DD
+      e['avance__excavacion'] = partesDeFecha[2] + '-' + partesDeFecha[1] + '-' + partesDeFecha[0]; // Reorganizar a D-M-YYYY
+    }
+
+    var hormigonado = e['avance__hormigonado'] === '' ? false : true;
+    if (e['avance__hormigonado']) {
+      var partesDeFecha = e['avance__hormigonado'].split('-'); // Separar YYYY, MM, DD
+      e['avance__hormigonado'] = partesDeFecha[2] + '-' + partesDeFecha[1] + '-' + partesDeFecha[0]; // Reorganizar a D-M-YYYY
+    }
+
+    var montado = e['avance__montado'] === '' ? false : true;
+    if (e['avance__montado']) {
+      var partesDeFecha = e['avance__montado'].split('-'); // Separar YYYY, MM, DD
+      e['avance__montado'] = partesDeFecha[2] + '-' + partesDeFecha[1] + '-' + partesDeFecha[0]; // Reorganizar a D-M-YYYY
+    }
+
+    if (e['avance__fechaFin']) {
+      var partesDeFecha = e['avance__fechaFin'].split('-'); // Separar YYYY, MM, DD
+      e['avance__fechaFin'] = partesDeFecha[2] + '-' + partesDeFecha[1] + '-' + partesDeFecha[0]; // Reorganizar a D-M-YYYY
+    }
+
+    var progressValue = Math.round(e['avance__porcentaje']*100); // Este es el valor de progreso. Reemplázalo con tu valor dinámico
 
     var popupContent = `
-    <div>
-    <strong> ${e['cod']} ${e['comuna']} - ${e['contratista']} </strong>
-    <p>${e['descripcion']}</p>
-    <div class="flex items-center mb-1">
-        <img src="${e['hormigonado'] ? checkIconPath : crossIconPath}" alt="Cross" class="w-3 h-3 mr-1"> Hormigonado
-    </div>
-    <div class="flex items-center mb-1">
-        <img src="${e['montado'] ? checkIconPath : crossIconPath}" alt="Check" class="w-3 h-3 mr-1"> Montado
-    </div>
-    <div class="flex items-center mb-1">
-      <img src="${e['empalmeE'] ? checkIconPath : crossIconPath}" alt="Check" class="w-3 h-3 mr-1"> Empalme Electrico
-    </div>
-    <div class="flex items-center mb-1">
-      Fecha Entrega: <b>${e['fechaFin']} </b>
-    </div>
-    <div class="flex items-center">
-        <div class="w-full h-4 bg-gray-200 rounded-full overflow-hidden relative mr-2">
-            <div class="h-full bg-red-400 rounded-full" style="width: ${progressValue}%;"></div>
+    <div class="max-w-60">
+      <div class="flex justify-around">
+        <a class="mr-0.5" href="https://www.google.com/maps/search/?api=1&query=${e['lat']},${e['lon']}" target="_blank" ">
+          <img src="${static_url}img/logoGoogleMaps.svg" alt="Google Maps" class="w-8 mr-1">
+        </a>
+        <div>
+          <strong> ${e['sitio']} ${e['nombre']} - ${e['contratista']} </strong>
         </div>
-        <span>${progressValue}%</span>
-    </div>
-    <a href="/media/pdfs/${e['cod']}.pdf" class="text-blue-500 hover:text-blue-700" download>Descargar Reporte</a>
-</div>
+      </div>
+      <div>
+        <div id="imagenes-${e['sitio'].toLowerCase()}" class="thumbnails">Cargando imágenes...</div>
+      </div>
+      <p>${e['avance__comentario']}</p>
+      <div class="flex items-center mb-1">
+        <img src="${excavado ? checkIconPath : crossIconPath}" alt="Cross" class="w-3 h-3 mr-1"> Excavación ${e['avance__excavacion']}
+      </div>  
+      <div class="flex items-center mb-1">
+          <img src="${hormigonado ? checkIconPath : crossIconPath}" alt="Cross" class="w-3 h-3 mr-1"> Hormigonado ${e['avance__hormigonado']}
+      </div>
+      <div class="flex items-center mb-1">
+          <img src="${montado ? checkIconPath : crossIconPath}" alt="Check" class="w-3 h-3 mr-1"> Montado ${e['avance__montado']}
+      </div>
+      <div class="flex items-center mb-1">
+        <img src="${e['empalmeE'] ? checkIconPath : crossIconPath}" alt="Check" class="w-3 h-3 mr-1"> Empalme Electrico
+      </div>
+      <div class="flex items-center mb-1">
+        Fecha Entrega: <b>${e['avance__fechaFin']} </b>
+      </div>
+      <div class="flex items-center">
+          <div class="w-full h-4 bg-gray-200 rounded-full overflow-hidden relative mr-2">
+              <div class="h-full bg-green-400 rounded-full" style="width: ${progressValue}%;"></div>
+          </div>
+          <span>${progressValue}%</span>
+      </div>
+  </div>
   `;
     // <iframe src="/media/pdfs/${e['cod']}.pdf" width="600" height="400"></iframe>
   // <a href="#" class="text-blue-500 hover:text-blue-700" onclick="openPdfModal('static/reportes/${e['cod']}.pdf')">Ver Reporte</a>
-  marker.bindPopup(popupContent);
-      
-      if (e.contratista == 'AJ') {
-        ajgroup.addLayer(marker);
-      } else {
-        mergroup.addLayer(marker);
-      }
-      allMarkers.push(marker);
-    });
+  marker.bindPopup(popupContent).on('popupopen', function() {
+    fetch(`imgs/api/${e['sitio'].toLowerCase()}/`)
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById(`imagenes-${data['slug']}`);
+            container.innerHTML = ''; // Limpiar el mensaje de carga
+            let firstImage = true;
+            data['imagenes'].forEach((img, index) => {
+                const imgElement = document.createElement('img');
+                imgElement.src = img.imagen;    
+                imgElement.alt = img.descripcion;
+                imgElement.className = 'thumbnail' + (firstImage ? ' active' : '');
+                firstImage = false; // Solo la primera imagen es activa inicialmente
+                imgElement.addEventListener('click', () => {
+                  // Redirige al usuario a la página de detalles de la galería
+                  // Supongamos que la URL de detalles puede construirse así:
+                  // "galeria/detail?id=ID_IMAGEN", donde ID_IMAGEN es un identificador único para cada imagen.
+                  window.location.href = `imgs/${e['sitio'].toLowerCase()}`; // Asegúrate de que `img.id` sea el dato correcto para construir la URL
+              });
+                container.appendChild(imgElement);
+            });
+            startCarousel(`imagenes-${data['slug']}`);
+        });
+});
+
+function startCarousel(containerId) {
+    const container = document.getElementById(containerId);
+    const images = container.getElementsByClassName('thumbnail');
+    let currentIndex = 0;
+
+    setInterval(() => {
+        images[currentIndex].classList.remove('active');
+        currentIndex = (currentIndex + 1) % images.length; // Vuelve al inicio si se supera la cantidad de imágenes
+        images[currentIndex].classList.add('active');
+    }, 2000); // Cambia cada 2 segundos
+}
+ 
+
+  if (e.contratista == 'AJ') {
+    ajgroup.addLayer(marker);
+  } else {
+    mergroup.addLayer(marker);
+  }
+  allMarkers.push(marker);
+});
     
-// Función para reagregar marcadores
+// Función para regenerar marcadores al actualizar cluster
 function reAddMarkers() {
   allMarkers.forEach(marker => {
       if (marker.options.contratista === 'AJ') {
@@ -197,7 +285,6 @@ function reAddMarkers() {
   });
 }
 
-// Función para actualizar el radio máximo del cluster
 // Función para actualizar el radio máximo del cluster
 function updateMaxClusterRadius(newRadius) {
   // Guardar la vista actual del mapa
@@ -226,20 +313,22 @@ function updateMaxClusterRadius(newRadius) {
     control.addTo(map);
 
 // Crear un control de UI para el radio del cluster con un slider
-var radiusControl = L.control({ position: 'topright' });
+var radiusControl = L.control({ position: 'bottomleft' });
 radiusControl.onAdd = function (map) {
     var div = L.DomUtil.create('div', 'leaflet-control leaflet-bar radius-control');
     div.innerHTML = `
-        <div class="leaflet-control-container" background-color: white; padding: 5px; border-radius: 4px;">
+        <div class="leaflet-control-container p-1" >
             <label for="radiusSlider">Radio del Cluster:</label>
-            <input type="range" id="radiusSlider" min="10" max="500" value="150" />
+            <input type="range" id="radiusSlider" min="0" max="500" value="150" />
             <span id="radiusValue">20</span>
         </div>
     `;
+    // Detiene la propagación de eventos del mouse al mapa
+    L.DomEvent.disableClickPropagation(div);
     return div;
 };
 radiusControl.addTo(map);
-// Función para actualizar el valor mostrado
+
 function updateRadiusValue(value) {
     document.getElementById('radiusValue').innerText = value;
 }
@@ -267,11 +356,11 @@ legendControl.onAdd = function (map) {
       { icon: 'marker-icon-yellow.png', text: 'Asignado' },
       { icon: 'marker-icon-green.png', text: 'En ejecución' },
       { icon: 'marker-icon-blue.png', text: 'Conlcuido' },
-      { icon: 'marker-icon-gris.png', text: 'Postergado' },
+      { icon: 'marker-icon-gris.png', text: 'Suspendido' },
       { icon: 'marker-icon-red.png', text: 'Cancelado' },
   ];
 
-  div.innerHTML += '<h4>LEYENDA</h4>';
+  // div.innerHTML += '<h4>LEYENDA</h4>';
   leyendas.forEach(function(leyenda) {
       var item = L.DomUtil.create('div', '', div);
       item.style.display = 'flex';
@@ -306,20 +395,20 @@ montadoAJ=0, montadoMER=0;
 sitios.forEach(e => {
   e['contratista'] === 'AJ' ? asignadoAJ++ : asignadoMER++;
   if (e['contratista'] === 'AJ') {
-    if (e['estado'] === 'EJE') {ejecucionAJ++}
-    if (e['estado'] === 'TER') {terminadoAJ++}
-    if (e['estado'] === 'PTG') {postergadoAJ++}
-    if (e['estado'] === 'CAN') {canceladoAJ++}
-    if (e['hormigonado'] === 1 ) {hormigonadoAJ++}
-    if (e['montado'] === 1 ) {montadoAJ++} 
+    if (e['avance__estado'] === 'EJE') {ejecucionAJ++}
+    if (e['avance__estado'] === 'TER') {terminadoAJ++}
+    if (e['avance__estado'] === 'PTG') {postergadoAJ++}
+    if (e['avance__estado'] === 'CAN') {canceladoAJ++}
+    if (e['avance__hormigonado'] !== '' ) {hormigonadoAJ++}
+    if (e['avance__montado'] !== '' ) {montadoAJ++} 
 
   } else {
-    if (e['estado'] === 'EJE') {ejecucionMER++}
-    if (e['estado'] === 'TER') {terminadoMER++}
-    if (e['estado'] === 'PTG') {postergadoMER++}
-    if (e['estado'] === 'CAN') {canceladoMER++}
-    if (e['hormigonado'] === 1 ) {hormigonadoMER++}
-    if (e['montado'] === 1 ) {montadoMER++}
+    if (e['avance__estado'] === 'EJE') {ejecucionMER++}
+    if (e['avance__estado'] === 'TER') {terminadoMER++}
+    if (e['avance__estado'] === 'PTG') {postergadoMER++}
+    if (e['avance__estado'] === 'CAN') {canceladoMER++}
+    if (e['avance__hormigonado'] !== '' ) {hormigonadoMER++}
+    if (e['avance__montado'] !== '' ) {montadoMER++}
   }
 });
 
@@ -328,56 +417,61 @@ var container = L.DomUtil.create('div');
 
 
     container.innerHTML = `
-    <table>
-      <td></td>
-      <td>AJ</td>
-      <td>MER</td>
-      <td>TOTAL</td>
-    </tr>
-    <tr>
-      <td> Asignado</td>
-      <td>${asignadoAJ}</td>
-      <td>${asignadoMER}</td>
-      <td>${asignadoMER + asignadoAJ}</td>
-    </tr>
-    <tr>
-      <td>Ejecutandose</td>
-      <td>${ejecucionAJ}</td>
-      <td>${ejecucionMER}</td>
-      <td>${ejecucionAJ + ejecucionMER}</td>
-    </tr>
-    <tr>
-      <td>Concluido</td>
-      <td>${terminadoAJ}</td>
-      <td>${terminadoMER}</td>
-      <td>${terminadoAJ + terminadoMER}</td>
-    </tr>
-    <tr>
-      <td>Postergado</td>
-      <td>${postergadoAJ}</td>
-      <td>${postergadoMER}</td>
-      <td>${postergadoAJ + postergadoMER}</td>
-    </tr>
-    <tr>
-      <td>Cancelado</td>
-      <td>${canceladoAJ}</td>
-      <td>${canceladoMER}</td>
-      <td>${canceladoAJ + canceladoMER}</td>
-    </tr>
-    <tr>
-    </tr>
-    <tr>
-      <td>Hormigonado</td>
-      <td>${hormigonadoAJ}</td>
-      <td>${hormigonadoMER}</td>
-      <td>${hormigonadoAJ + hormigonadoMER}</td>
-    </tr>
-    <td>Montaje</td>
-      <td>${montadoAJ}</td>
-      <td>${montadoMER}</td>
-      <td>${montadoAJ + montadoMER}</td>
-    </tr>
+    <table class="text-xs">
+    <thead>
+      <tr>
+        <th class="text-left"></th>
+        <th class="min-w-8">AJ</th>
+        <th class="min-w-8">MER</th>
+        <th>TOTAL</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="text-left">Asignado</td>
+        <td>${asignadoAJ}</td>
+        <td>${asignadoMER}</td>
+        <td>${asignadoMER + asignadoAJ}</td>
+      </tr>
+      <tr>
+        <td class="text-left">En ejecución</td>
+        <td>${ejecucionAJ}</td>
+        <td>${ejecucionMER}</td>
+        <td>${ejecucionAJ + ejecucionMER}</td>
+      </tr>
+      <tr>
+        <td class="text-left">Hormigonado</td>
+        <td>${hormigonadoAJ}</td>
+        <td>${hormigonadoMER}</td>
+        <td>${hormigonadoAJ + hormigonadoMER}</td>
+      </tr>
+      <tr>
+        <td class="text-left">Montaje</td>
+        <td>${montadoAJ}</td>
+        <td>${montadoMER}</td>
+        <td>${montadoAJ + montadoMER}</td>
+      </tr>
+      <tr>
+        <td class="text-left">Concluido</td>
+        <td>${terminadoAJ}</td>
+        <td>${terminadoMER}</td>
+        <td>${terminadoAJ + terminadoMER}</td>
+      </tr>
+      <tr>
+        <td class="text-left">Suspendido</td>
+        <td>${postergadoAJ}</td>
+        <td>${postergadoMER}</td>
+        <td>${postergadoAJ + postergadoMER}</td>
+      </tr>
+      <tr>
+        <td class="text-left">Cancelado</td>
+        <td>${canceladoAJ}</td>
+        <td>${canceladoMER}</td>
+        <td>${canceladoAJ + canceladoMER}</td>
+      </tr>
+    </tbody>
   </table>
+  
   
   `;
 
@@ -397,6 +491,77 @@ customControl.onAdd = function(map) {
 customControl.addTo(map)
   
 
+
+// Sistema de bsuqueda
+document.addEventListener("DOMContentLoaded", function() {
+  const data = [
+      // Tu lista de objetos aquí
+  ];
+
+  const searchField = document.getElementById('searchField');
+  const results = document.getElementById('results');
+
+  searchField.addEventListener('input', function() {
+      const searchTerm = this.value.toLowerCase();
+      const filteredData = data.filter(item => item.sitio.toLowerCase().includes(searchTerm) ||
+                                                item.entel_id.toLowerCase().includes(searchTerm));
+      
+      results.innerHTML = '';
+      
+      filteredData.forEach(item => {
+          const optionElement = document.createElement('option');
+          optionElement.value = item.entel_id;
+          optionElement.textContent = `${item.sitio} (${item.entel_id})`;
+          results.appendChild(optionElement);
+      });
+  });
+
+  results.addEventListener('change', function() {
+      const selectedItem = data.find(item => item.entel_id === this.value);
+      if (selectedItem) {
+          console.log(`Coordenadas de ${selectedItem.sitio}: lat ${selectedItem.lat}, lon ${selectedItem.lon}`);
+      }
+  });
+});
+
+
+
+
+// Buscador
+document.getElementById('buscador').addEventListener('input', function() {
+  const query = this.value;
+  const resultadosElement = document.getElementById('resultados');
+  resultadosElement.innerHTML = ''; // Limpiar resultados anteriores
+
+  if(query.length > 2){ // Para empezar a buscar después de 2 caracteres
+    fetch(`/buscar_sitio/?q=${query}`)
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('La respuesta de la red no fue ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+      data.forEach(sitio => {
+          const li = document.createElement('li');
+          li.textContent = `${sitio.nombre} (${sitio.sitio} - ${sitio.entel_id})`;
+          li.addEventListener('click', () => {
+              console.log(`Lat: ${sitio.lat}, Lon: ${sitio.lon}`);
+              map.flyTo([sitio.lat, sitio.lon], 12, {
+                animate: true,
+                duration: 2 // Duración de la animación en segundos, ajustable.
+              });
+              resultadosElement.innerHTML = '';
+              buscador.value = '';
+          });
+          resultadosElement.appendChild(li);
+      });
+    })
+    .catch(error => {
+      console.error('Hubo un problema con la operación fetch:', error);
+    });
+  }
+});
 
 
 

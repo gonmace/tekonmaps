@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     'theme',
     'import_export',
     'widget_tweaks',
+    'rest_framework',
 
 ]
 
