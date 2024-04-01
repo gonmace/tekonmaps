@@ -41,7 +41,7 @@ def fileupload(request):
             comentario_texto = form.cleaned_data.get('comentario') 
             images = request.FILES.getlist('images')  # Asegúrate de que el nombre del campo en el formulario HTML sea 'images'
 
-            imagenes_a_crear = [Imagen(imagen=image, galeria=galeria, fecha_carga=fecha_carga, user=request.user) for image in images]
+            imagenes_a_crear = [Imagen(imagen=image, galeria=galeria, fecha_carga=fecha_carga, usuario=request.user) for image in images]
 
             # Usar bulk_create para mejorar la eficiencia
             Imagen.objects.bulk_create(imagenes_a_crear)
