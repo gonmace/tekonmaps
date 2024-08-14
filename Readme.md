@@ -1,4 +1,6 @@
-# Dj-skeleton
+# tekonmaps
+Mapa de los proyectos y seguimiento con reporte fotografico
+---
 
 ```shell
 python3 -m venv .venv
