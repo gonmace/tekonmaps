@@ -1,36 +1,34 @@
 @import "tailwindcss";
-@plugin "daisyui";
+@plugin "daisyui" {
+  themes: false;
+}
 
 @source "../templates/**/*.html";
 @source "../docs/**/*.html";
 
-/* Tema Tk Redline - basado en https://tekon-rl.cl */
-[data-theme="tkredline"] {
+/* Tema Light - Tk Redline (basado en https://tekon-rl.cl) */
+@plugin "daisyui/theme" {
+  name: "tkredline";
+  default: true;
   color-scheme: light;
 
-  /* Base */
-  --color-base-100: oklch(100% 0 0);          /* blanco */
-  --color-base-200: oklch(97% 0 0);           /* gris muy claro */
-  --color-base-300: oklch(93% 0 0);           /* gris claro */
-  --color-base-content: oklch(20% 0.07 255);  /* navy oscuro - texto principal */
+  --color-base-100: oklch(100% 0 0);
+  --color-base-200: oklch(97% 0 0);
+  --color-base-300: oklch(93% 0 0);
+  --color-base-content: oklch(20% 0.07 255);
 
-  /* Primary - Rojo Redline #CC1B1F */
   --color-primary: oklch(45% 0.21 27);
   --color-primary-content: oklch(97% 0 0);
 
-  /* Secondary - Navy oscuro #1B2847 */
   --color-secondary: oklch(20% 0.07 255);
   --color-secondary-content: oklch(97% 0 0);
 
-  /* Accent - Rojo más claro para hover */
   --color-accent: oklch(55% 0.22 27);
   --color-accent-content: oklch(97% 0 0);
 
-  /* Neutral */
   --color-neutral: oklch(25% 0.05 255);
   --color-neutral-content: oklch(97% 0 0);
 
-  /* Estados */
   --color-info: oklch(74% 0.16 232);
   --color-info-content: oklch(97% 0 0);
   --color-success: oklch(76% 0.18 163);
@@ -40,7 +38,42 @@
   --color-error: oklch(65% 0.22 25);
   --color-error-content: oklch(97% 0 0);
 
-  /* Forma */
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.375rem;
+}
+
+/* Tema Dark - Tk Redline Dark */
+@plugin "daisyui/theme" {
+  name: "tkredline-dark";
+  color-scheme: dark;
+
+  --color-base-100: #0b121f;
+  --color-base-200: #151e2b;
+  --color-base-300: #1f2935;
+  --color-base-content: oklch(92% 0.006 265);
+
+  --color-primary: oklch(52% 0.21 27);
+  --color-primary-content: oklch(100% 0 0);
+
+  --color-secondary: oklch(70% 0.165 163);
+  --color-secondary-content: oklch(100% 0 0);
+
+  --color-accent: oklch(78% 0.16 54);
+  --color-accent-content: oklch(10% 0.03 45);
+
+  --color-neutral: oklch(10% 0.035 260);
+  --color-neutral-content: oklch(87% 0.02 255);
+
+  --color-info: oklch(77% 0.12 215);
+  --color-info-content: oklch(15% 0.05 255);
+  --color-success: oklch(70% 0.165 163);
+  --color-success-content: oklch(15% 0.05 163);
+  --color-warning: oklch(83% 0.189 84);
+  --color-warning-content: oklch(15% 0.05 84);
+  --color-error: oklch(72% 0.175 22);
+  --color-error-content: oklch(15% 0.05 22);
+
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.375rem;
