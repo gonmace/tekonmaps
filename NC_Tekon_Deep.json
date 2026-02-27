@@ -1,0 +1,90 @@
+{
+  "name": "NC_Tekon_Deep",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "nc-tekon-deep",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-deep",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ],
+      "webhookId": "nc-tekon-deep"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recibe ?path=/20 AJ/Nombre Carpeta\n// Devuelve {subfolder: {pdf: N, dwg: M, ...}, ...}\n\nconst rootPath = $input.first().json.query?.path || '/20 AJ';\nconst BASE = 'https://n8npozos.magoreal.com/webhook/nc-tekon';\n\nasync function fetchItems(path) {\n  try {\n    const resp = await fetch(`${BASE}?path=${encodeURIComponent(path)}`);\n    if (!resp.ok) return [];\n    const data = await resp.json();\n    return Array.isArray(data) ? data : [];\n  } catch (e) {\n    return [];\n  }\n}\n\nfunction parseName(encodedPath) {\n  return decodeURIComponent(encodedPath).replace(/\\/$/, '').split('/').pop();\n}\n\nfunction countFiles(items) {\n  const counts = {};\n  for (const item of items) {\n    if (item.type !== 'file') continue;\n    const name = decodeURIComponent(item.path).split('/').pop();\n    if (!name.includes('.')) continue;\n    const ext = name.split('.').pop().toLowerCase();\n    counts[ext] = (counts[ext] || 0) + 1;\n  }\n  // Ordenar por conteo desc, luego alfabético\n  return Object.fromEntries(\n    Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))\n  );\n}\n\n// 1. Listar subcarpetas del path raíz\nconst subItems = await fetchItems(rootPath);\nconst subFolders = subItems.filter(i => i.type === 'folder');\n\n// 2. Para cada subcarpeta, listar sus archivos en paralelo\nconst results = await Promise.all(\n  subFolders.map(async (folder) => {\n    const name = parseName(folder.path);\n    const subPath = `${rootPath}/${name}`;\n    const fileItems = await fetchItems(subPath);\n    return [name, countFiles(fileItems)];\n  })\n);\n\nconst output = Object.fromEntries(results);\nreturn [{ json: output }];"
+      },
+      "id": "code-deep",
+      "name": "Fetch y Contar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-deep",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        208,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch y Contar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch y Contar": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "16f731b3-01da-4ec5-8f08-33c1fdd05004",
+  "meta": {
+    "instanceId": "d9c5adb5b47dc1dff2717f3c50997b1de6d705b83f6fc3647d372ee5b662ea9d"
+  },
+  "id": "NzzGL1Kq8342IjTB",
+  "tags": []
+}

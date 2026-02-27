@@ -5,9 +5,10 @@ FROM node:22-alpine AS frontend
 
 WORKDIR /app
 
-# Copiar todo lo necesario para el build (templates para @source)
+# Copiar todo lo necesario para el build (templates y docs para @source)
 COPY static_src/ ./static_src/
 COPY templates/ ./templates/
+COPY docs/ ./docs/
 
 WORKDIR /app/static_src
 

@@ -7,4 +7,5 @@ echo 'Running migrations...'
 python manage.py migrate --settings=core.settings.prod
 
 echo 'Runing Server...'
-gunicorn core.wsgi:application DJANGO_SETTINGS_MODULE=core.settings.prod --bind 0.0.0.0:8000
+export DJANGO_SETTINGS_MODULE=core.settings.prod
+gunicorn core.wsgi:application --bind 0.0.0.0:8000
