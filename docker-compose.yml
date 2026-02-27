@@ -1,11 +1,11 @@
 # Producción - Gunicorn
 services:
   django:
-    container_name: Django
+    container_name: pti-tekon-rl-cl-django
     build: .
     restart: always
     ports:
-      - 8010:8000
+      - 8008:8000
     volumes:
       - ./:/app
     depends_on:
@@ -21,7 +21,7 @@ services:
 
   db:
     image: postgres:14.3-alpine3.16
-    container_name: postgres
+    container_name: pti-tekon-rl-cl-db
     restart: always
     ports:
       - 5431:5432

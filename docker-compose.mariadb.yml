@@ -6,6 +6,7 @@
 
 services:
   django:
+    container_name: pti-tekon-rl-cl-django
     build:
       context: .
       dockerfile: Dockerfile.mariadb
@@ -26,6 +27,7 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
 
   db:
+    container_name: pti-tekon-rl-cl-db
     image: mariadb:10.11
     environment:
       - MARIADB_DATABASE=${DATABASE_NAME:-tekonmaps}
