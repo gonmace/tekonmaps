@@ -56,22 +56,33 @@ docker compose exec django python manage.py migrate --settings=core.settings.pro
 ```bash
 ./backup-db.sh
 ```
-- Guarda el dump en `backups/dump_<nombre_db>_<timestamp>.sql`
-- Inicia el servicio `db` automáticamente si no está corriendo
+El script pregunta qué base de datos usar:
+- **1) SQLite (local)** — genera `dumpdata_<timestamp>.json` (formato portable para PostgreSQL)
+- **2) PostgreSQL (Docker)** — usa pg_dump, guarda en `backups/dump_<nombre_db>_<timestamp>.sql`
 
-**Restaurar (usa el dump más reciente):**
+**Migrar de SQLite local a PostgreSQL (producción):**
+```bash
+# 1. En local: backup desde SQLite
+./backup-db.sh   # elige 1
+# → crea backups/dumpdata_20260226_123456.json
+
+# 2. Sube el archivo .json al servidor (git, scp, etc.)
+
+# 3. En producción: restaurar a PostgreSQL
+./restore-db.sh backups/dumpdata_20260226_123456.json
+# Aplica migraciones y carga los datos
+```
+
+**Restaurar (usa el backup más reciente):**
 ```bash
 ./restore-db.sh
 ```
+Detecta el tipo por extensión: `.json` → loaddata en PostgreSQL, `.sql` → PostgreSQL, `.sqlite3` → SQLite.
 
-**Restaurar un archivo concreto:**
+**PostgreSQL: borrar datos y restaurar desde cero:**
 ```bash
-./restore-db.sh backups/dump_base_20260226_202534.sql
-```
-
-**Borrar la BD y restaurar desde cero:**
-```bash
-./restore-db.sh --drop backups/dump_base_20260226_202534.sql
+./restore-db.sh --drop backups/dump_base_20260226.sql
+./restore-db.sh --drop backups/dumpdata_20260226.json   # flush + loaddata
 ```
 
 ## Desarrollo con MariaDB

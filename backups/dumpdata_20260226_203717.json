@@ -1,0 +1,190 @@
+[
+{
+  "model": "auth.user",
+  "fields": {
+    "password": "pbkdf2_sha256$720000$n8xvTVz8TpRdjRTMcSI3W9$ahfVYaw8IensyPK0BzE5kkyp0LyqSoJyOqgX2EP47X0=",
+    "last_login": "2026-02-27T00:04:03.465Z",
+    "is_superuser": true,
+    "username": "gonzalo",
+    "first_name": "",
+    "last_name": "",
+    "email": "",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-02-26T03:53:12.902Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "9fojt7cx6rk6d7z4842wlx5zt6pak9kn",
+  "fields": {
+    "session_data": ".eJxVjMsOwiAQRf-FtSEMrzgu3fsNZIBBqgaS0q4a_12bdKHbe865mwi0LjWsg-cwZXERIE6_W6T05LaD_KB27zL1tsxTlLsiDzrkrWd-XQ_376DSqN-6gDEINjMAWl2oMBIwQSSbUCUoqJwFr8-aIySNyXsG77TKLqMpUbw_4BY3wQ:1vvlKt:FsyD1yLeq_Z4gB5W894CinDYaDQARSqeoNwYB3iFX4Q",
+    "expire_date": "2026-03-13T00:04:03.472Z"
+  }
+},
+{
+  "model": "sites.site",
+  "fields": {
+    "domain": "example.com",
+    "name": "example.com"
+  }
+},
+{
+  "model": "docs.docempresa",
+  "pk": 1,
+  "fields": {
+    "nombre": "AJ",
+    "carpeta_nextcloud": "20 AJ",
+    "link_nextcloud": "https://cloud2.tekon-rl.cl/s/wwPPkkayAdY2tbn",
+    "orden": 0
+  }
+},
+{
+  "model": "docs.docempresa",
+  "pk": 2,
+  "fields": {
+    "nombre": "MER",
+    "carpeta_nextcloud": "20 MER",
+    "link_nextcloud": "",
+    "orden": 0
+  }
+},
+{
+  "model": "docs.docempresa",
+  "pk": 3,
+  "fields": {
+    "nombre": "GH3",
+    "carpeta_nextcloud": "20 GH3",
+    "link_nextcloud": "",
+    "orden": 0
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 1,
+  "fields": {
+    "action_time": "2026-02-26T03:59:12.523Z",
+    "user": [
+      "gonzalo"
+    ],
+    "content_type": [
+      "docs",
+      "docempresa"
+    ],
+    "object_id": "3",
+    "object_repr": "GH3",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Codigo\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 2,
+  "fields": {
+    "action_time": "2026-02-26T03:59:43.172Z",
+    "user": [
+      "gonzalo"
+    ],
+    "content_type": [
+      "docs",
+      "doccarpeta"
+    ],
+    "object_id": "1",
+    "object_repr": "20 AJ / 20 AJ",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 3,
+  "fields": {
+    "action_time": "2026-02-26T04:04:56.100Z",
+    "user": [
+      "gonzalo"
+    ],
+    "content_type": [
+      "docs",
+      "docempresa"
+    ],
+    "object_id": "1",
+    "object_repr": "AJ",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Nombre\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 4,
+  "fields": {
+    "action_time": "2026-02-26T04:05:03.740Z",
+    "user": [
+      "gonzalo"
+    ],
+    "content_type": [
+      "docs",
+      "docempresa"
+    ],
+    "object_id": "2",
+    "object_repr": "MER",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Nombre\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 5,
+  "fields": {
+    "action_time": "2026-02-26T04:05:11.475Z",
+    "user": [
+      "gonzalo"
+    ],
+    "content_type": [
+      "docs",
+      "docempresa"
+    ],
+    "object_id": "3",
+    "object_repr": "GH3",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Carpeta nextcloud\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 6,
+  "fields": {
+    "action_time": "2026-02-26T04:05:14.830Z",
+    "user": [
+      "gonzalo"
+    ],
+    "content_type": [
+      "docs",
+      "docempresa"
+    ],
+    "object_id": "2",
+    "object_repr": "MER",
+    "action_flag": 2,
+    "change_message": "[]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 7,
+  "fields": {
+    "action_time": "2026-02-26T23:47:33.478Z",
+    "user": [
+      "gonzalo"
+    ],
+    "content_type": [
+      "docs",
+      "docempresa"
+    ],
+    "object_id": "1",
+    "object_repr": "AJ",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Link nextcloud\"]}}]"
+  }
+}
+]
