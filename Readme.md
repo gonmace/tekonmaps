@@ -117,6 +117,27 @@ python manage.py migrate
 docker compose -f docker-compose.mariadb.yml up --build
 ```
 
+## APIs
+
+### Externas (webhooks n8n)
+
+| API | URL | Uso |
+|-----|-----|-----|
+| nc-tekon | `https://n8npozos.magoreal.com/webhook/nc-tekon` | Lista items (carpetas/archivos) de Nextcloud. Parámetro: `?path=/ruta` |
+| nc-tekon-deep | `https://n8npozos.magoreal.com/webhook/nc-tekon-deep` | Conteo de archivos por subcarpeta. Parámetro: `?path=/ruta` |
+
+Los webhooks usan internamente la API de Nextcloud (nodo n8n `nextCloud`).
+
+### Internas (Django)
+
+| Endpoint | Método | Uso |
+|----------|--------|-----|
+| `/docs/api/sitios/` | GET | Lista sitios (carpetas raíz) por empresa |
+| `/docs/api/carpetas/` | GET | Carpetas con estructura o con archivos |
+| `/docs/api/carpetas/archivos/` | GET | Subcarpetas con conteo de archivos por sitio |
+
+Flujo: Django → `requests` → webhooks n8n → API Nextcloud → JSON.
+
 ## Estructura
 
 - `core/` — Configuración Django (settings, urls, views)
