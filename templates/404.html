@@ -1,12 +1,15 @@
-
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}Page not found{% endblock %}
+{% block title %}Página no encontrada{% endblock %}
 
-{% block body_class %}template-404{% endblock %}
+{% block body_class %}min-h-screen flex items-center justify-center{% endblock %}
 
 {% block content %}
-<h1>Page not found</h1>
-
-<h2>Sorry, this page could not be found.</h2>
+<div class="text-center">
+    <h1 class="text-6xl font-bold text-error">404</h1>
+    <h2 class="text-2xl mt-4">Página no encontrada</h2>
+    <p class="mt-2 opacity-80">Lo sentimos, esta página no existe.</p>
+    <a href="{% url 'home' %}" class="btn btn-primary mt-6">Volver al inicio</a>
+</div>
 {% endblock %}

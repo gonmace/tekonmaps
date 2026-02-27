@@ -1,0 +1,43 @@
+# Desarrollo con MariaDB (alternativa a PostgreSQL)
+# Uso: docker compose -f docker-compose.mariadb.yml up -d
+#
+# Fix error 1071 "Specified key was too long; max key length is 767 bytes":
+# --innodb-large-prefix=1 permite índices hasta 3072 bytes (utf8mb4)
+
+services:
+  django:
+    build:
+      context: .
+      dockerfile: Dockerfile.mariadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+    depends_on:
+      - db
+    environment:
+      - DJANGO_SETTINGS_MODULE=core.settings.dev
+      - DATABASE_ENGINE=mysql
+      - DATABASE_NAME=${DATABASE_NAME:-tekonmaps}
+      - DATABASE_USER=${DATABASE_USER:-tekonmaps}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-tekonmaps}
+      - DATABASE_HOST=db
+      - DATABASE_PORT=3306
+    command: python manage.py runserver 0.0.0.0:8000
+
+  db:
+    image: mariadb:10.11
+    environment:
+      - MARIADB_DATABASE=${DATABASE_NAME:-tekonmaps}
+      - MARIADB_USER=${DATABASE_USER:-tekonmaps}
+      - MARIADB_PASSWORD=${DATABASE_PASSWORD:-tekonmaps}
+      - MARIADB_ROOT_PASSWORD=${DATABASE_PASSWORD:-tekonmaps}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    # MariaDB 10.2+ ya tiene índices largos por defecto.
+    # Si usas MariaDB < 10.2, añade: --innodb-large-prefix=1 --innodb-file-format=Barracuda
+
+volumes:
+  mariadb_data:

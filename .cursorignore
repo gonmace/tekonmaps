@@ -1,0 +1,36 @@
+# Reduce análisis constante de archivos (CPU)
+# Cursor usa esto para excluir del indexado AI - el MCP sigue activo
+
+# Entornos y dependencias
+.venv/
+venv/
+env/
+node_modules/
+
+# Base de datos y datos
+db/
+*.sqlite3
+*.db
+data/
+media/
+
+# Build y estáticos generados
+staticfiles/
+static/css/main.css
+daisyui.mjs
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Git y cache
+.git/
+.cache/
+
+# Docs generados
+docs/_build/

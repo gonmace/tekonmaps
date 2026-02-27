@@ -1,0 +1,47 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+@source "../templates/**/*.html";
+@source "../docs/**/*.html";
+
+/* Tema Tk Redline - basado en https://tekon-rl.cl */
+[data-theme="tkredline"] {
+  color-scheme: light;
+
+  /* Base */
+  --color-base-100: oklch(100% 0 0);          /* blanco */
+  --color-base-200: oklch(97% 0 0);           /* gris muy claro */
+  --color-base-300: oklch(93% 0 0);           /* gris claro */
+  --color-base-content: oklch(20% 0.07 255);  /* navy oscuro - texto principal */
+
+  /* Primary - Rojo Redline #CC1B1F */
+  --color-primary: oklch(45% 0.21 27);
+  --color-primary-content: oklch(97% 0 0);
+
+  /* Secondary - Navy oscuro #1B2847 */
+  --color-secondary: oklch(20% 0.07 255);
+  --color-secondary-content: oklch(97% 0 0);
+
+  /* Accent - Rojo más claro para hover */
+  --color-accent: oklch(55% 0.22 27);
+  --color-accent-content: oklch(97% 0 0);
+
+  /* Neutral */
+  --color-neutral: oklch(25% 0.05 255);
+  --color-neutral-content: oklch(97% 0 0);
+
+  /* Estados */
+  --color-info: oklch(74% 0.16 232);
+  --color-info-content: oklch(97% 0 0);
+  --color-success: oklch(76% 0.18 163);
+  --color-success-content: oklch(97% 0 0);
+  --color-warning: oklch(82% 0.19 84);
+  --color-warning-content: oklch(15% 0.05 80);
+  --color-error: oklch(65% 0.22 25);
+  --color-error-content: oklch(97% 0 0);
+
+  /* Forma */
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.375rem;
+}

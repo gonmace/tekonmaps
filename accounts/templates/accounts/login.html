@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Iniciar sesión — Tk Redline{% endblock %}
+
+{% block header %}
+{% include "header.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="min-h-[calc(100vh-8rem)] flex flex-col items-center justify-center p-4">
+  <div class="card w-full max-w-xs bg-base-100 shadow-xl border border-base-300">
+    <div class="card-body">
+      <h1 class="card-title text-2xl justify-center text-primary mb-2">Tk Redline</h1>
+      <p class="text-center text-base-content/70 mb-6">Inicia sesión para acceder a la documentación</p>
+
+      {% if form.non_field_errors %}
+      <div class="alert alert-error mb-4">
+        {% for error in form.non_field_errors %}
+        <span>{{ error }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="post" action="{% url 'accounts:login' %}" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}" />
+
+        <div class="form-control w-full">
+          <label class="label" for="id_username">
+            <span class="label-text">Usuario</span>
+          </label>
+          <input type="text" name="username" id="id_username" autofocus autocomplete="username"
+            class="input input-bordered w-full {% if form.username.errors %}input-error{% endif %}"
+            placeholder="Usuario"
+            value="{{ form.username.value|default:'' }}" />
+          {% if form.username.errors %}
+          <label class="label">
+            <span class="label-text-alt text-error">{{ form.username.errors.0 }}</span>
+          </label>
+          {% endif %}
+        </div>
+
+        <div class="form-control w-full">
+          <label class="label" for="id_password">
+            <span class="label-text">Contraseña</span>
+          </label>
+          <input type="password" name="password" id="id_password" autocomplete="current-password"
+            class="input input-bordered w-full {% if form.password.errors %}input-error{% endif %}"
+            placeholder="Contraseña" />
+          {% if form.password.errors %}
+          <label class="label">
+            <span class="label-text-alt text-error">{{ form.password.errors.0 }}</span>
+          </label>
+          {% endif %}
+        </div>
+
+        <div class="card-actions justify-center mt-6">
+          <button type="submit" class="btn btn-primary w-full">Entrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block footer %}
+{% include "footer.html" %}
+{% endblock %}

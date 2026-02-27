@@ -1,0 +1,3 @@
+# Requerido cuando usas MariaDB/MySQL (DATABASE_ENGINE=mysql)
+-r base.txt
+mysqlclient>=2.2.0

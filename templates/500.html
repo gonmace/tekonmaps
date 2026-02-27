@@ -1,13 +1,17 @@
+{% load static %}
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
-    <head>
-        <meta charset="utf-8" />
-        <title>Internal server error</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-    </head>
-    <body>
-        <h1>Internal server error</h1>
-
-        <h2>Sorry, there seems to be an error. Please try again soon.</h2>
-    </body>
+<html lang="es" data-theme="tkredline">
+<head>
+    <meta charset="utf-8" />
+    <title>Error del servidor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="{% static 'css/main.css' %}" rel="stylesheet" type="text/css" />
+</head>
+<body class="min-h-screen flex items-center justify-center">
+    <div class="text-center">
+        <h1 class="text-6xl font-bold text-error">500</h1>
+        <h2 class="text-2xl mt-4">Error interno del servidor</h2>
+        <p class="mt-2 opacity-80">Lo sentimos, ha ocurrido un error. Inténtalo de nuevo más tarde.</p>
+    </div>
+</body>
 </html>

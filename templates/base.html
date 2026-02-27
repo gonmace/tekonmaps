@@ -1,52 +1,41 @@
-
 {% load static tailwind_tags %}
-
 <!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="utf-8" />
+<html lang="es" data-theme="tkredline" id="html-root">
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <title>{% block title %}Tk Redline{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {% tailwind_css %}
+    {% block css %}{% endblock %}
+    {% block javascript_top %}{% endblock %}
+</head>
+<body class="bg-base-300 text-base-content {% block body_class %}{% endblock %}">
+    {% block header %}{% endblock %}
+    {% block content %}{% endblock %}
+    {% block footer %}{% endblock %}
+    {% block modal %}{% endblock %}
+    {% block inline_javascript %}{% endblock %}
+    {% block extra_js %}{% endblock %}
 
-        <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <script>
+        // Persistir tema en localStorage
+        const root = document.getElementById('html-root');
+        const saved = localStorage.getItem('theme');
+        if (saved) root.setAttribute('data-theme', saved);
 
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) themeToggle.addEventListener('change', function() {
+            const theme = this.checked ? 'tkredline-dark' : 'tkredline';
+            root.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        });
 
-          <title>
-
-          </title>
-
-          <meta name="description" content="{{ page.search_description }}" />
-
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-    
-        {% tailwind_css %}
-
-        {% block css %}
-        {% endblock css %}
-
-        {% block javascript_top %}
-        {% endblock javascript_top %}
-    </head>
-
-    <body class="{% block body_class %}{% endblock %}">
-
-        {% block header %}
-        {% endblock header %}
-
-        {% block content %}
-        {% endblock content %}
-
-        {% block footer %}
-        {% endblock footer %}
-
-        {% block modal %}
-        {% endblock modal %}
-
-        {% block inline_javascript %}
-        {% endblock inline_javascript %}
-
-        {% block extra_js %}
-        {% endblock extra_js %}
-
-    </body>
+        // Sincronizar el toggle con el tema guardado
+        const currentTheme = root.getAttribute('data-theme');
+        if (themeToggle && currentTheme === 'tkredline-dark') {
+            themeToggle.checked = true;
+        }
+    </script>
+</body>
 </html>
-
-
