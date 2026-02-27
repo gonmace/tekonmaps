@@ -30,8 +30,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar dependencias Python
-COPY requirements/prod.txt ./
-RUN pip install --no-cache-dir -r prod.txt
+COPY requirements/ ./requirements/
+RUN pip install --no-cache-dir -r requirements/prod.txt
 
 # Copiar proyecto
 COPY . .
