@@ -10,11 +10,18 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 COMPOSE_CMD="docker compose -f $COMPOSE_FILE"
 
-# Cargar .env si existe (evita warnings de variables no definidas)
+# Cargar .env si existe (evita errores con caracteres especiales en valores)
 if [ -f .env ]; then
-  set -a
-  . ./.env
-  set +a
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      '#'*|'') continue ;;
+      *=*)
+        key="${line%%=*}"; key="${key% }"; key="${key# }"
+        val="${line#*=}"; val="${val#\"}"; val="${val%\"}"
+        export "$key=$val"
+        ;;
+    esac
+  done < .env
   COMPOSE_CMD="$COMPOSE_CMD --env-file .env"
 fi
 # Evitar warning de DJANGO_SECRET_KEY al parsear compose (solo usamos db)
