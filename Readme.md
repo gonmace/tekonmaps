@@ -38,16 +38,40 @@ cp .env.sample .env
 docker compose up -d --build
 ```
 
-- App en http://localhost:8010
+- App en http://localhost:8008
 - Gunicorn + PostgreSQL
 - El CSS se compila durante el build
 
 ```bash
 # Crear superusuario
-docker compose exec Django python manage.py createsuperuser --settings=core.settings.prod
+docker compose exec django python manage.py createsuperuser --settings=core.settings.prod
 
 # Migraciones
-docker compose exec Django python manage.py migrate --settings=core.settings.prod
+docker compose exec django python manage.py migrate --settings=core.settings.prod
+```
+
+## Backup y restore de la base de datos
+
+**Crear backup:**
+```bash
+./backup-db.sh
+```
+- Guarda el dump en `backups/dump_<nombre_db>_<timestamp>.sql`
+- Inicia el servicio `db` automáticamente si no está corriendo
+
+**Restaurar (usa el dump más reciente):**
+```bash
+./restore-db.sh
+```
+
+**Restaurar un archivo concreto:**
+```bash
+./restore-db.sh backups/dump_base_20260226_202534.sql
+```
+
+**Borrar la BD y restaurar desde cero:**
+```bash
+./restore-db.sh --drop backups/dump_base_20260226_202534.sql
 ```
 
 ## Desarrollo con MariaDB
