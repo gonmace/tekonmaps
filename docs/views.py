@@ -254,17 +254,25 @@ def api_carpetas(request):
 
 
 def _count_files_in_folder(path):
-    """Cuenta archivos por extensión en una carpeta usando el endpoint básico."""
+    """Cuenta archivos por extensión en una carpeta (recursivo y paralelo) usando el endpoint básico."""
     conteo = Counter()
     try:
         items = _fetch_items(path)
+        sub_paths = []
         for item in items:
-            if item.get("type") != "file":
-                continue
-            name = item.get("name") or item.get("basename") or _parse_name(item.get("path", ""))
-            if name and "." in name:
-                ext = name.rsplit(".", 1)[-1].lower()
-                conteo[ext] += 1
+            if item.get("type") == "file":
+                name = item.get("name") or item.get("basename") or _parse_name(item.get("path", ""))
+                if name and "." in name:
+                    ext = name.rsplit(".", 1)[-1].lower()
+                    conteo[ext] += 1
+            elif item.get("type") == "folder":
+                sub_name = _parse_name(item.get("path", ""))
+                if sub_name:
+                    sub_paths.append(f"{path}/{sub_name}")
+        if sub_paths:
+            with ThreadPoolExecutor(max_workers=6) as ex:
+                for sub_conteo in ex.map(_count_files_in_folder, sub_paths):
+                    conteo.update(sub_conteo)
         return dict(conteo)
     except Exception:
         return {}
@@ -311,6 +319,16 @@ def api_carpetas_archivos(request):
                         subfolders.sort(key=lambda s: s["nombre"])
                 except Exception:
                     pass
+            # Para subcarpetas sin archivos, buscar un nivel más adentro
+            subs_sin_archivos = [s for s in subfolders if not s.get("archivos")]
+            if subs_sin_archivos:
+                def enrich_sub(sub, rfp=root_folder_path):
+                    sub_path = f"{rfp}/{sub['nombre']}"
+                    archivos = _count_files_in_folder(sub_path)
+                    return {**sub, "archivos": archivos} if archivos else sub
+                with ThreadPoolExecutor(max_workers=6) as ex:
+                    enriched = {s["nombre"]: s for s in ex.map(enrich_sub, subs_sin_archivos)}
+                subfolders = [enriched.get(s["nombre"], s) for s in subfolders]
             resultado[nombre] = subfolders
             ts = _get_folder_lastmod(root_folder_path)
             if ts:

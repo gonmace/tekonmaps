@@ -1,12 +1,28 @@
 @import "tailwindcss";
 @plugin "daisyui" {
   themes: false;
+  logs: false;
 }
 
 @source "../templates/**/*.html";
+@source "../accounts/**/*.html";
 @source "../docs/**/*.html";
 
-/* Tema Light - Tk Redline (basado en https://tekon-rl.cl) */
+/* Corrige el gap interno del .badge de DaisyUI v5.
+   DaisyUI define gap:.5rem dentro de @layer daisyui.l1.l2.l3 (sub-capa de utilities).
+   Las reglas sin sub-capa dentro de @layer utilities tienen mayor prioridad. */
+@layer utilities {
+  .badge { gap: 0; }
+}
+
+/* Badges con colores de marca por tipo de archivo (mayor especificidad para sobreescribir DaisyUI) */
+.badge.badge-word { background-color: #2B579A !important; color: #fff !important; border: none !important; }
+.badge.badge-excel { background-color: #217346 !important; color: #fff !important; border: none !important; }
+.badge.badge-autocad { background-color: #E51937 !important; color: #fff !important; border: none !important; }
+.badge.badge-pdf { background-color: #E60012 !important; color: #fff !important; border: none !important; }
+.badge.badge-powerpoint { background-color: #D24726 !important; color: #fff !important; border: none !important; }
+
+/* ─── Tema Light: Tk Redline ─────────────────────────────────────────────── */
 @plugin "daisyui/theme" {
   name: "tkredline";
   default: true;
@@ -41,9 +57,14 @@
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.375rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
 }
 
-/* Tema Dark - Tk Redline Dark */
+/* ─── Tema Dark: Tk Redline Dark ─────────────────────────────────────────── */
 @plugin "daisyui/theme" {
   name: "tkredline-dark";
   color-scheme: dark;
@@ -77,4 +98,9 @@
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.375rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
 }

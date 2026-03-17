@@ -1,0 +1,14 @@
+{
+  "name": "theme",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "npx @tailwindcss/cli -i ./src/styles.css -o ../../static/css/main.css --watch",
+    "build": "npx @tailwindcss/cli -i ./src/styles.css -o ../../static/css/main.css --minify"
+  },
+  "dependencies": {
+    "@tailwindcss/cli": "^4.0.0",
+    "daisyui": "^5.0.0",
+    "tailwindcss": "^4.0.0"
+  }
+}

@@ -78,7 +78,24 @@
   const sitiosLabel = document.getElementById('sitios-dropdown-label');
   const sitiosMenu = document.getElementById('sitios-dropdown-menu');
 
-  const EXT_BADGE = { pdf: 'badge-error', dwg: 'badge-info', dxf: 'badge-info', xlsx: 'badge-success', xls: 'badge-success', docx: 'badge-primary', doc: 'badge-primary', jpg: 'badge-warning', jpeg: 'badge-warning', png: 'badge-warning', zip: 'badge-neutral', rar: 'badge-neutral' };
+  const EXT_BADGE = {
+    /* Word */
+    doc: 'badge-word', docx: 'badge-word',
+    /* Excel / hojas de cálculo */
+    xlsx: 'badge-excel', xls: 'badge-excel', csv: 'badge-excel', scls: 'badge-excel',
+    /* AutoCAD */
+    dwg: 'badge-autocad', dxf: 'badge-autocad',
+    /* Adobe PDF */
+    pdf: 'badge-pdf',
+    /* PowerPoint */
+    pptx: 'badge-powerpoint', ppt: 'badge-powerpoint',
+    /* Imágenes */
+    jpg: 'badge-warning', jpeg: 'badge-warning', png: 'badge-warning', gif: 'badge-warning', svg: 'badge-warning',
+    /* Comprimidos */
+    zip: 'badge-neutral', rar: 'badge-neutral', '7z': 'badge-neutral',
+    /* Texto / datos */
+    txt: 'badge-ghost', xml: 'badge-ghost', json: 'badge-ghost',
+  };
 
   const STORAGE_EMPRESA = 'docs_empresa';
   const STORAGE_SITIOS = 'docs_sitios';
@@ -132,7 +149,7 @@
         badges = '<span class="loading loading-spinner loading-xs opacity-50"></span>';
       } else if (archivos && typeof archivos === 'object' && Object.keys(archivos).length > 0) {
         badges = Object.entries(archivos).map(([ext, count]) =>
-          `<span class="badge badge-sm font-mono ${badgeClass(ext)}"><span class="font-bold">${Number(count) || 0}</span><span class="opacity-75">.${escapeHtml(ext)}</span></span>`
+          `<span class="badge badge-sm font-mono font-bold ${badgeClass(ext)}">${Number(count) || 0}.${escapeHtml(ext)}</span>`
         ).join('');
       } else {
         badges = '<span class="text-xs text-base-content/20">—</span>';

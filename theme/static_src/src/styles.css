@@ -1,14 +1,29 @@
 @import "tailwindcss";
+@plugin "daisyui" {
+  themes: false;
+  logs: false;
+}
 
-@source not "./daisyui{,*}.mjs";
-@source "../../../**/*.{html,py,js}";
-@source not "../../../**/node_modules/**";
-@source not "../../../**/.venv/**";
+@source "../../../templates/**/*.html";
+@source "../../../accounts/**/*.html";
+@source "../../../docs/**/*.html";
 
-@plugin "./daisyui.mjs";
+/* Corrige el gap interno del .badge de DaisyUI v5.
+   DaisyUI define gap:.5rem dentro de @layer daisyui.l1.l2.l3 (sub-capa de utilities).
+   Las reglas sin sub-capa dentro de @layer utilities tienen mayor prioridad. */
+@layer utilities {
+  .badge { gap: 0; border: 1px solid rgba(0,0,0,0.2); }
+}
 
-/* Tema Light - Tk Redline (basado en https://tekon-rl.cl) */
-@plugin "./daisyui-theme.mjs" {
+/* Badges con colores de marca por tipo de archivo (mayor especificidad para sobreescribir DaisyUI) */
+.badge.badge-word { background-color: #2B579A !important; color: #fff !important; border: 1px solid rgba(0,0,0,0.25) !important; }
+.badge.badge-excel { background-color: #217346 !important; color: #fff !important; border: 1px solid rgba(0,0,0,0.25) !important; }
+.badge.badge-autocad { background-color: #ff9f94 !important; color: #000 !important; border: 1px solid rgba(0,0,0,0.25) !important; }
+.badge.badge-pdf { background-color: #E60012 !important; color: #fff !important; border: 1px solid rgba(0,0,0,0.25) !important; }
+.badge.badge-powerpoint { background-color: #D24726 !important; color: #fff !important; border: 1px solid rgba(0,0,0,0.25) !important; }
+
+/* ─── Tema Light: Tk Redline ─────────────────────────────────────────────── */
+@plugin "daisyui/theme" {
   name: "tkredline";
   default: true;
   color-scheme: light;
@@ -42,46 +57,50 @@
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.375rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
 }
 
-/* Tema Dark - Tk Redline Dark */
-@plugin "./daisyui-theme.mjs" {
+/* ─── Tema Dark: Tk Redline Dark ─────────────────────────────────────────── */
+@plugin "daisyui/theme" {
   name: "tkredline-dark";
   color-scheme: dark;
 
-  /* Fondos: progresión aritmética desde base-300 (#1f2935) */
-  --color-base-100: #0b121f;   /* #0b121f  ← calculado */
-  --color-base-200: #151e2b;    /* #151e2b  ← midpoint */
-  --color-base-300: #1f2935;    /* #1f2935  ← ancla */
-  --color-base-content: oklch(92% 0.006 265); /* #e5e7eb */
+  --color-base-100: #0b121f;
+  --color-base-200: #151e2b;
+  --color-base-300: #1f2935;
+  --color-base-content: oklch(92% 0.006 265);
 
-  /* Rojo RedLine */
-  --color-primary: oklch(52% 0.21 27);      /* #dc2626 red-600 */
-  --color-primary-content: oklch(100% 0 0); /* #fff */
+  --color-primary: oklch(52% 0.21 27);
+  --color-primary-content: oklch(100% 0 0);
 
-  /* Verde esmeralda */
-  --color-secondary: oklch(70% 0.165 163);  /* #10b981 emerald-500 */
-  --color-secondary-content: oklch(100% 0 0); /* #fff */
+  --color-secondary: oklch(70% 0.165 163);
+  --color-secondary-content: oklch(100% 0 0);
 
-  /* Naranja */
-  --color-accent: oklch(78% 0.16 54);       /* #fb923c orange-400 */
-  --color-accent-content: oklch(10% 0.03 45); /* #1b1007 */
+  --color-accent: oklch(78% 0.16 54);
+  --color-accent-content: oklch(10% 0.03 45);
 
-  /* Navy profundo para fondos neutral */
-  --color-neutral: oklch(10% 0.035 260);    /* #0b1220 */
-  --color-neutral-content: oklch(87% 0.02 255); /* #cfd8e3 */
+  --color-neutral: oklch(10% 0.035 260);
+  --color-neutral-content: oklch(87% 0.02 255);
 
-  /* Estados */
-  --color-info: oklch(77% 0.12 215);        /* #38bdf8 sky-400 */
+  --color-info: oklch(77% 0.12 215);
   --color-info-content: oklch(15% 0.05 255);
-  --color-success: oklch(70% 0.165 163);    /* #10b981 emerald-500 */
+  --color-success: oklch(70% 0.165 163);
   --color-success-content: oklch(15% 0.05 163);
-  --color-warning: oklch(83% 0.189 84);     /* #fbbf24 amber-400 */
+  --color-warning: oklch(83% 0.189 84);
   --color-warning-content: oklch(15% 0.05 84);
-  --color-error: oklch(72% 0.175 22);       /* #f87171 red-400 */
+  --color-error: oklch(72% 0.175 22);
   --color-error-content: oklch(15% 0.05 22);
 
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.375rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
 }
