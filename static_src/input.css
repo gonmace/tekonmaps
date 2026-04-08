@@ -8,6 +8,32 @@
 @source "../accounts/**/*.html";
 @source "../docs/**/*.html";
 
+/* Clases generadas dinámicamente en JavaScript (no detectadas por el scanner) */
+@source inline("flex items-center gap-1 gap-1.5 gap-2 gap-3 gap-4 shrink-0 flex-shrink-0 flex-1 min-w-0 truncate");
+@source inline("cursor-pointer select-none transition-colors transition-shadow");
+@source inline("rounded-lg rounded-t-2xl rounded-2xl");
+@source inline("px-2 px-3 px-4 py-1 py-1.5 py-2 py-3 py-8 pt-1 pb-3 mt-0.5 mt-1 ml-3 pl-5 pl-6");
+@source inline("w-3 w-3.5 w-5 w-16 h-3 h-3.5 h-5 h-16");
+@source inline("text-sm text-xs text-lg font-semibold font-medium font-mono font-bold italic");
+@source inline("text-primary text-base-content/40 text-base-content/50 text-base-content/60 text-base-content/20");
+@source inline("bg-base-100 bg-base-200 bg-base-300");
+@source inline("border border-l border-b border-base-300");
+@source inline("space-y-0.5 space-y-1");
+@source inline("opacity-50 opacity-80");
+@source inline("hidden");
+@source inline("hover:bg-base-200 hover:shadow-md hover:underline hover:text-primary");
+@source inline("shadow-sm shadow-md");
+@source inline("loading loading-spinner loading-xs loading-lg");
+@source inline("badge badge-sm badge-ghost badge-neutral badge-warning");
+@source inline("card card-body card-sitio");
+
+/* Fuerza color-scheme en dark para que los elementos nativos (select, input)
+   usen colores del sistema operativo acordes al tema oscuro */
+[data-theme="tkredline-dark"] {
+  color-scheme: dark;
+}
+
+
 /* Corrige el gap interno del .badge de DaisyUI v5.
    DaisyUI define gap:.5rem dentro de @layer daisyui.l1.l2.l3 (sub-capa de utilities).
    Las reglas sin sub-capa dentro de @layer utilities tienen mayor prioridad. */

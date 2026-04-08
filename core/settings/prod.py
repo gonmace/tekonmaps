@@ -16,18 +16,10 @@ INSTALLED_APPS += []
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-_db_password = os.environ.get('DATABASE_PASSWORD')
-if not _db_password:
-    raise ValueError("DATABASE_PASSWORD debe estar definida en producción")
-
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DATABASE_NAME', 'tekonmaps'),
-        'USER': os.environ.get('DATABASE_USER', 'tekonmaps'),
-        'PASSWORD': _db_password,
-        'HOST': os.environ.get('DATABASE_HOST', 'db'),
-        'PORT': os.environ.get('DATABASE_PORT', '5432'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 

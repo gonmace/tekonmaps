@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Documentación — Tk Redline{% endblock %}
+{% block title %}Docs. Contratista — Tk Redline{% endblock %}
 
 {% block header %}{% include 'header.html' %}{% endblock %}
 
@@ -12,14 +12,14 @@
     <!-- Selectores: Empresa + Sitios -->
     <div class="flex flex-wrap items-end gap-3">
       <div class="flex items-end gap-2 flex-1 sm:flex-initial">
-        <label class="form-control w-full sm:w-auto max-w-xs">
+        <div class="form-control w-full sm:w-auto">
           <span class="label-text font-medium">Empresa</span>
           <select id="empresa-select" class="select select-bordered select-sm w-full sm:w-40">
             {% for e in empresas %}
             <option value="{{ e.nombre }}" {% if e.nombre == empresa %}selected{% endif %}>{{ e.nombre_display }}</option>
             {% endfor %}
           </select>
-        </label>
+        </div>
       </div>
 
       <div id="sitios-dropdown-wrapper" class="form-control w-full sm:w-auto sm:min-w-80 hidden">
@@ -325,14 +325,14 @@
   const empresaSelect = document.getElementById('empresa-select');
   const empresasOpciones = Array.from(empresaSelect.options).map(o => o.value);
 
-  // Restaurar empresa desde localStorage si es válida
+  // Restaurar desde localStorage
   const savedEmpresa = localStorage.getItem(STORAGE_EMPRESA);
   if (savedEmpresa && empresasOpciones.includes(savedEmpresa)) {
     empresaSelect.value = savedEmpresa;
   }
 
-  empresaSelect.addEventListener('change', function() {
-    localStorage.setItem(STORAGE_EMPRESA, this.value);
+  empresaSelect.addEventListener('change', () => {
+    localStorage.setItem(STORAGE_EMPRESA, empresaSelect.value);
     cargarDocumentos();
   });
 

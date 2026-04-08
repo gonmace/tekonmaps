@@ -1,0 +1,20 @@
+[
+  {
+    "nombre": "AJ",
+    "carpeta_nextcloud": "20 AJ",
+    "link_nextcloud": "https://cloud2.tekon-rl.cl/s/wwPPkkayAdY2tbn",
+    "orden": 0
+  },
+  {
+    "nombre": "MER",
+    "carpeta_nextcloud": "20 MER",
+    "link_nextcloud": "",
+    "orden": 1
+  },
+  {
+    "nombre": "GH3",
+    "carpeta_nextcloud": "20 GH3",
+    "link_nextcloud": "",
+    "orden": 2
+  }
+]

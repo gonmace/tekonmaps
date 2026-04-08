@@ -4,7 +4,7 @@
         <a href="{% url 'home' %}" class="btn btn-ghost text-xl text-primary font-bold">Tk Redline</a>
         {% if titulo_pagina %}
         <span class="text-base-content/60">/</span>
-        <a href="{% url 'docs:index' %}" class="text-xl font-semibold hover:underline">{{ titulo_pagina }}</a>
+        <span class="text-xl font-semibold">{{ titulo_pagina }}</span>
         {% endif %}
     </div>
     <div class="flex-none gap-2">
@@ -20,7 +20,8 @@
             </svg>
         </label>
         {% if user.is_authenticated %}
-        <a href="{% url 'docs:index' %}" class="btn btn-ghost btn-sm">Documentación</a>
+        <a href="{% url 'docs:index' %}" class="btn btn-ghost btn-sm {% if request.resolver_match.url_name == 'index' and request.resolver_match.app_name == 'docs' %}btn-active{% endif %}">Docs. Contratista</a>
+        <a href="{% url 'docs:final' %}" class="btn btn-ghost btn-sm {% if request.resolver_match.url_name == 'final' and request.resolver_match.app_name == 'docs' %}btn-active{% endif %}">Docs. Finales</a>
         <a href="{% url 'accounts:logout' %}" class="btn btn-ghost btn-sm">Cerrar sesión</a>
         {% endif %}
         <a href="{% url 'admin:index' %}" class="btn btn-ghost btn-sm">Admin</a>

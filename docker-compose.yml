@@ -8,26 +8,6 @@ services:
       - 8008:8000
     volumes:
       - ./:/app
-    depends_on:
-      - db
     environment:
       - DJANGO_SETTINGS_MODULE=core.settings.prod
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
-      - DATABASE_NAME=${DATABASE_NAME:-base}
-      - DATABASE_USER=${DATABASE_USER:-magoreal}
-      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-ojalaque}
-      - DATABASE_HOST=db
-      - DATABASE_PORT=5432
-
-  db:
-    image: postgres:14.3-alpine3.16
-    container_name: pti-tekon-rl-cl-db
-    restart: always
-    ports:
-      - 5431:5432
-    environment:
-      - POSTGRES_DB=${DATABASE_NAME:-base}
-      - POSTGRES_USER=${DATABASE_USER:-magoreal}
-      - POSTGRES_PASSWORD=${DATABASE_PASSWORD:-ojalaque}
-    volumes:
-      - ./db:/var/lib/postgresql/data

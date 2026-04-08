@@ -112,6 +112,9 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# URL base de Nextcloud para Docs. Finales (carpeta 20-PTI SP compartida)
+NEXTCLOUD_FINAL_BASE = os.environ.get('NEXTCLOUD_FINAL_BASE', '')
+
 # Cache: filesystem, TTL 1 hora. Se comparte entre workers.
 CACHES = {
     "default": {
