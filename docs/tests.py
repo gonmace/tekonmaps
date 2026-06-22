@@ -9,8 +9,9 @@ from django.contrib.auth.models import User
 
 from docs import company_loader, nextcloud, seguimiento
 from docs.models import (
-    ConfirmacionDocumento, DocumentoEsperado, EliminacionPendiente,
-    ObservacionDocumento, PlantillaEstructura, SitioEstructura, UserProfile,
+    AccesoSitio, ArchivoOculto, ConfirmacionDocumento, DocumentoEsperado,
+    EliminacionPendiente, ObservacionDocumento, PlantillaEstructura, SitioEstructura,
+    UserProfile,
 )
 
 
@@ -393,6 +394,9 @@ class RevisionYBorradoTests(TestCase):
         UserProfile.objects.create(user=self.ito, rol="rol_ito_hse")
         self.coord = User.objects.create_user("coord", password="x")
         UserProfile.objects.create(user=self.coord, rol="rol_coordinador")
+        # Acceso por sitio: las escrituras exigen AccesoSitio al (empresa, sitio).
+        for u in (self.ito, self.coord):
+            AccesoSitio.objects.create(user=u, empresa="AJ", sitio="S1")
         self.client = Client()
 
     def _post(self, name, body):
@@ -457,3 +461,68 @@ class RevisionYBorradoTests(TestCase):
         self.assertEqual(r.status_code, 200)
         deleted.assert_not_called()
         self.assertFalse(EliminacionPendiente.objects.filter(path="/20 AJ/S1/f.pdf").exists())
+
+    def test_escritura_en_sitio_no_asignado_da_403(self):
+        """IDOR: un usuario con rol pero sin AccesoSitio al (empresa, sitio) no puede mutarlo,
+        aunque sí pueda actuar sobre los sitios que tiene asignados."""
+        self.client.force_login(self.ito)  # solo tiene AccesoSitio a ("AJ", "S1")
+        r = self._post("docs:observar", {"empresa": "AJ", "sitio": "OTRO",
+                                         "doc_id": self.doc.id, "rol": "rol_ito_hse",
+                                         "texto": "intruso"})
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(ObservacionDocumento.objects.filter(sitio="OTRO").exists())
+        with mock.patch.object(nextcloud, "delete") as deleted:
+            r = self._post("docs:eliminar_archivo",
+                           {"empresa": "AJ", "sitio": "OTRO", "path": "/20 AJ/OTRO/f.pdf"})
+        self.assertEqual(r.status_code, 403)
+        deleted.assert_not_called()
+
+
+class OcultarFotosTests(TestCase):
+    """Soft-delete reversible de fotos en una galería (ArchivoOculto): nunca toca Nextcloud."""
+
+    def setUp(self):
+        cache.clear()
+        self.ito = User.objects.create_user("ito_user", password="x")
+        UserProfile.objects.create(user=self.ito, rol="rol_ito")
+        AccesoSitio.objects.create(user=self.ito, empresa="AJ", sitio="S1")
+        self.vis = User.objects.create_user("vis", password="x")
+        UserProfile.objects.create(user=self.vis, rol="visitante")
+        self.client = Client()
+
+    def _post(self, name, body):
+        return self.client.post(reverse(name), data=json.dumps(body),
+                                content_type="application/json")
+
+    def test_ocultar_varias_no_borra_de_nextcloud(self):
+        self.client.force_login(self.ito)
+        with mock.patch.object(nextcloud, "delete") as deleted:
+            r = self._post("docs:ocultar_archivo", {
+                "empresa": "AJ", "sitio": "S1",
+                "paths": ["/20 AJ/S1/a.jpg", "/20 AJ/S1/b.jpg"]})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["ocultos"], 2)
+        deleted.assert_not_called()
+        self.assertEqual(ArchivoOculto.objects.filter(empresa="AJ", sitio="S1").count(), 2)
+
+    def test_restaurar_quita_la_marca(self):
+        self.client.force_login(self.ito)
+        ArchivoOculto.objects.create(empresa="AJ", sitio="S1", path="/20 AJ/S1/a.jpg")
+        r = self._post("docs:restaurar_archivo",
+                       {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/a.jpg"})
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(ArchivoOculto.objects.filter(path="/20 AJ/S1/a.jpg").exists())
+
+    def test_visitante_no_puede_ocultar(self):
+        self.client.force_login(self.vis)
+        r = self._post("docs:ocultar_archivo",
+                       {"empresa": "AJ", "sitio": "S1", "paths": ["/20 AJ/S1/a.jpg"]})
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(ArchivoOculto.objects.exists())
+
+    def test_ocultar_sitio_no_asignado_da_403(self):
+        self.client.force_login(self.ito)  # solo AccesoSitio a ("AJ", "S1")
+        r = self._post("docs:ocultar_archivo",
+                       {"empresa": "AJ", "sitio": "OTRO", "paths": ["/20 AJ/OTRO/a.jpg"]})
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(ArchivoOculto.objects.exists())

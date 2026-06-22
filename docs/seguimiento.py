@@ -20,7 +20,7 @@ from django.core.cache import cache as _cache
 
 from . import company_loader, nextcloud
 from .models import (
-    ACCIONES_REVISION, AsignacionArchivo, ConfirmacionDocumento,
+    ACCIONES_REVISION, ArchivoOculto, AsignacionArchivo, ConfirmacionDocumento,
     DocumentoEsperado, DocumentoNoNecesario, EliminacionPendiente,
     ObservacionDocumento, ROL_COLORES,
     SeguimientoCache, plantilla_de_sitio,
@@ -407,6 +407,8 @@ def _ensamblar_datos(empresa, sitio, archivos, ito_base):
     obs_map = _observaciones(empresa, sitio)
     pendientes = set(EliminacionPendiente.objects.filter(
         empresa=empresa, sitio=sitio).values_list("path", flat=True))
+    ocultos = set(ArchivoOculto.objects.filter(
+        empresa=empresa, sitio=sitio).values_list("path", flat=True))
     for a in archivos:  # origen del archivo: del constructor o subido por TKR (área ITO)
         a["origen"] = "ito" if a["base"] == ito_base else "constructor"
 
@@ -473,7 +475,8 @@ def _ensamblar_datos(empresa, sitio, archivos, ito_base):
         documentos.append(_doc_dict(
             d, "presente" if presente else "falta", _format_lastmod(fecha_ts),
             [{"nombre": a["nombre"], "fecha": a["fecha"], "path": a["path"],
-              "origen": a["origen"], "pendiente_eliminar": a["path"] in pendientes}
+              "origen": a["origen"], "pendiente_eliminar": a["path"] in pendientes,
+              "oculto": a["path"] in ocultos}
              for a in asig],
             _roles(d, conf_map.get(d.id, {}), obs_map.get(d.id, {})), necesario=necesario,
             obs=obs_map.get(d.id, {}),

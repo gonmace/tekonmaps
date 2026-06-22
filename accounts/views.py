@@ -65,8 +65,10 @@ def login_view(request):
         user = _buscar_usuario(correo)
 
         if user is None:
-            context["error"] = ("No existe una cuenta con ese correo. "
-                                 "Contacta al administrador.")
+            # Mismo mensaje que una contraseña incorrecta para no revelar qué correos
+            # existen (anti-enumeración). El flujo de primer ingreso (redirect a crear
+            # contraseña) sigue siendo distinguible, pero es un estado transitorio.
+            context["error"] = "Correo o contraseña incorrectos."
         elif not user.is_active:
             context["error"] = "Tu cuenta está deshabilitada. Contacta al administrador."
         elif not user.has_usable_password():

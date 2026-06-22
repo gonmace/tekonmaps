@@ -31,4 +31,9 @@ COPY ./ ./
 # CSS ya compilado y minificado desde la stage anterior
 COPY --from=css-builder /app/static/css/dist/ ./static/css/dist/
 
+# Liveness: gunicorn debe estar aceptando conexiones en :8000. Se chequea por socket
+# (sin curl en la imagen slim; evita los líos de ALLOWED_HOSTS/SSL-redirect de un GET HTTP).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+    CMD python -c "import socket,sys; socket.create_connection(('127.0.0.1',8000),timeout=4).close()" || exit 1
+
 CMD ["sh", "entrypoint.sh"]

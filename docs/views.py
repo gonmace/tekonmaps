@@ -1,4 +1,5 @@
 import json
+import os
 from collections import Counter
 from datetime import datetime
 from urllib.parse import unquote
@@ -14,9 +15,9 @@ from django.urls import reverse
 
 from . import company_loader, nextcloud, seguimiento
 from .models import (
-    ACCIONES_REVISION, AsignacionArchivo, ConfirmacionDocumento, DocumentoEsperado,
-    DocumentoNoNecesario, EliminacionPendiente, EstructuraCache, ObservacionDocumento,
-    ProyectoFinalCache, ROL_COLORES, SitioCache,
+    ACCIONES_REVISION, ArchivoOculto, AsignacionArchivo, ConfirmacionDocumento,
+    DocumentoEsperado, DocumentoNoNecesario, EliminacionPendiente, EstructuraCache,
+    ObservacionDocumento, ProyectoFinalCache, ROL_COLORES, SitioCache,
 )
 
 
@@ -216,6 +217,19 @@ def _sitios_permitidos(user, empresa):
                .values_list("sitio", flat=True))
 
 
+def _denegar_sitio(user, empresa, sitio):
+    """403 si el usuario no tiene acceso al ``(empresa, sitio)``; ``None`` si puede.
+
+    Reusa ``_sitios_permitidos`` (que devuelve ``None`` para el superusuario, por lo que
+    nunca queda denegado). Pensado para las **escrituras**: la restricción por sitio ya se
+    aplica en las lecturas y debe valer también al mutar (subir/confirmar/observar/eliminar…).
+    """
+    permitidos = _sitios_permitidos(user, empresa)
+    if permitidos is not None and sitio not in permitidos:
+        return JsonResponse({"error": "No tienes acceso a este sitio."}, status=403)
+    return None
+
+
 def _empresas_permitidas(user):
     """Empresas con al menos un sitio asignado. None = sin restricción (superusuario)."""
     if user.is_superuser:
@@ -410,6 +424,30 @@ def actualizar_estructura(request):
         return JsonResponse({"error": str(e), "documentos": []}, status=500)
 
 
+# Límites de subida. El ``content_type`` del cliente no es de fiar, así que validamos
+# por extensión (whitelist) + tamaño antes de enviar nada a Nextcloud.
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB por archivo
+EXT_DOCUMENTO = {
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv",
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff",
+    ".dwg", ".dxf", ".zip", ".rar", ".7z", ".kmz", ".kml",
+}
+EXT_IMAGEN = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".bmp", ".tif", ".tiff"}
+EXT_VIDEO = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpg", ".mpeg"}
+
+
+def _validar_subida(archivo, extensiones, etiqueta):
+    """Valida tamaño y extensión de un ``UploadedFile``. Devuelve un mensaje de error
+    (str) o ``None`` si es válido."""
+    if archivo.size and archivo.size > MAX_UPLOAD_BYTES:
+        tope = MAX_UPLOAD_BYTES // (1024 * 1024)
+        return f"El archivo «{archivo.name}» supera el límite de {tope} MB."
+    ext = os.path.splitext(archivo.name or "")[1].lower()
+    if ext not in extensiones:
+        return f"Tipo de archivo no permitido para {etiqueta}: «{ext or archivo.name}»."
+    return None
+
+
 @login_required
 def subir_archivo(request):
     """POST multipart (solo administrador): sube un archivo para un documento al área ITO.
@@ -424,6 +462,11 @@ def subir_archivo(request):
     archivos = request.FILES.getlist("file")
     if not (empresa and sitio and doc_id and archivos):
         return JsonResponse({"error": "Faltan datos o archivo."}, status=400)
+    if (denegado := _denegar_sitio(request.user, empresa, sitio)):
+        return denegado
+    for archivo in archivos:
+        if (err := _validar_subida(archivo, EXT_DOCUMENTO, "documentos")):
+            return JsonResponse({"error": err}, status=400)
     doc = get_object_or_404(DocumentoEsperado, pk=doc_id)
     nombres = request.POST.getlist("nombre")  # nombre final por archivo (front)
     subidos = []
@@ -454,6 +497,12 @@ def subir_multimedia(request):
     archivos = request.FILES.getlist("file")
     if not (empresa and sitio and tipo in ("imagenes", "videos") and archivos):
         return JsonResponse({"error": "Faltan datos o archivo."}, status=400)
+    if (denegado := _denegar_sitio(request.user, empresa, sitio)):
+        return denegado
+    permitidas = EXT_IMAGEN if tipo == "imagenes" else EXT_VIDEO
+    for archivo in archivos:
+        if (err := _validar_subida(archivo, permitidas, "multimedia")):
+            return JsonResponse({"error": err}, status=400)
     try:
         for archivo in archivos:
             seguimiento.subir_multimedia(sitio, tipo, archivo.read(), archivo.name,
@@ -483,6 +532,8 @@ def confirmar(request):
     roles_validos = {c for c, _, _ in DocumentoEsperado.ROLES}
     if not (empresa and sitio and doc_id and rol in roles_validos):
         return JsonResponse({"error": "Datos inválidos."}, status=400)
+    if (denegado := _denegar_sitio(request.user, empresa, sitio)):
+        return denegado
     doc = get_object_or_404(DocumentoEsperado, pk=doc_id)
     # Solo las acciones de revisión se confirman a mano; el resto va por subida.
     if getattr(doc, rol, "") not in ACCIONES_REVISION:
@@ -524,6 +575,8 @@ def observar(request):
     roles_validos = {c for c, _, _ in DocumentoEsperado.ROLES}
     if not (empresa and sitio and doc_id and rol in roles_validos and texto):
         return JsonResponse({"error": "Datos inválidos (falta la nota)."}, status=400)
+    if (denegado := _denegar_sitio(request.user, empresa, sitio)):
+        return denegado
     doc = get_object_or_404(DocumentoEsperado, pk=doc_id)
     existente = ObservacionDocumento.objects.filter(
         empresa=empresa, sitio=sitio, documento=doc, rol=rol).first()
@@ -584,6 +637,8 @@ def enmendar_observacion(request):
     rol = (data.get("rol") or "").strip()
     if not (empresa and sitio and doc_id and rol):
         return JsonResponse({"error": "Datos inválidos."}, status=400)
+    if (denegado := _denegar_sitio(request.user, empresa, sitio)):
+        return denegado
     o = ObservacionDocumento.objects.filter(
         empresa=empresa, sitio=sitio, documento_id=doc_id, rol=rol).first()
     if not o:
@@ -642,6 +697,8 @@ def asignar_archivo(request):
     doc_id = data.get("doc_id")
     if not (empresa and sitio and doc_id and path.startswith("/20")):
         return JsonResponse({"error": "Datos inválidos."}, status=400)
+    if (denegado := _denegar_sitio(request.user, empresa, sitio)):
+        return denegado
     doc = get_object_or_404(DocumentoEsperado, pk=doc_id)
     AsignacionArchivo.objects.update_or_create(
         empresa=empresa, sitio=sitio, path=path,
@@ -662,6 +719,8 @@ def _parse_eliminacion(request):
     path = data.get("path") or ""
     if not path.startswith("/20") or not (empresa and sitio):
         return JsonResponse({"error": "Datos inválidos."}, status=400)
+    if (denegado := _denegar_sitio(request.user, empresa, sitio)):
+        return denegado
     return empresa, sitio, path
 
 
@@ -723,11 +782,62 @@ def rechazar_eliminacion(request):
 
 
 @login_required
+def ocultar_archivo(request):
+    """POST JSON (administrador): **oculta** (soft-delete reversible) una o varias imágenes de
+    una galería. NO borra de Nextcloud; solo deja de mostrarlas. Un admin las restaura con
+    ``restaurar_archivo``. Body: {empresa, sitio, paths: [...]} (acepta también ``path`` único)."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    try:
+        data = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "JSON inválido."}, status=400)
+    empresa = (data.get("empresa") or "").strip()
+    sitio = (data.get("sitio") or "").strip()
+    paths = data.get("paths") or ([data["path"]] if data.get("path") else [])
+    paths = [p for p in paths if isinstance(p, str) and p.startswith("/20")]
+    if not (empresa and sitio and paths):
+        return JsonResponse({"error": "Datos inválidos."}, status=400)
+    if (denegado := _denegar_sitio(request.user, empresa, sitio)):
+        return denegado
+    for p in paths:
+        ArchivoOculto.objects.update_or_create(
+            empresa=empresa, sitio=sitio, path=p, defaults={"usuario": request.user})
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"ok": True, "ocultos": len(paths)})
+
+
+@login_required
+def restaurar_archivo(request):
+    """POST JSON (administrador): restaura una imagen oculta (quita el soft-delete).
+    Body: {empresa, sitio, path}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    parsed = _parse_eliminacion(request)
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    empresa, sitio, path = parsed
+    ArchivoOculto.objects.filter(empresa=empresa, sitio=sitio, path=path).delete()
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"ok": True, "oculto": False})
+
+
+@login_required
 def descargar_archivo(request):
     """GET ?path= : proxy de descarga de un archivo de Nextcloud (para ver/abrir).
-    Solo se permiten rutas bajo el área ITO o bajo carpetas de empresa (que empiecen con '/20')."""
+    Solo se permiten rutas bajo el área ITO o bajo carpetas de empresa (que empiecen con '/20').
+    Exige acceso a alguna sección de documentos (Contratista/Seguimiento); un visitante sin
+    secciones no descarga. El control fino por sitio se aplica en las vistas que listan/asignan."""
+    denied = _gate_api(request.user, "acceso_contratista", "acceso_seguimiento")
+    if denied:
+        return denied
     path = request.GET.get("path", "")
-    if not path.startswith("/20"):
+    # Rechaza traversal: la ruta normalizada debe seguir bajo '/20*'.
+    if ".." in path or not os.path.normpath(path).startswith("/20"):
         raise Http404("Ruta no permitida.")
     try:
         contenido, ctype = nextcloud.download(path)
@@ -761,6 +871,9 @@ def _buscar_template(codigo, archivos):
 def descargar_template(request, pk):
     """Descarga el template de un documento esperado, **únicamente** desde la carpeta
     de plantillas en /20-ITO_SEGUIMIENTO/00-PLANTILLAS (búsqueda recursiva por código)."""
+    denied = _gate_api(request.user, "acceso_contratista", "acceso_seguimiento")
+    if denied:
+        return denied
     doc = get_object_or_404(DocumentoEsperado, pk=pk)
     if not doc.codigo:
         raise Http404("El documento no tiene template asociado.")

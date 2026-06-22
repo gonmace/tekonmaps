@@ -75,13 +75,42 @@
   </dialog>
 
   <dialog id="modal-galeria" class="modal">
-    <div class="modal-box max-w-5xl w-11/12">
-      <div class="flex items-center justify-between gap-2 mb-3">
-        <h3 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-images text-info"></i> <span id="galeria-title">Galería</span></h3>
-        <form method="dialog"><button class="btn btn-ghost btn-sm btn-circle"><i class="fa-solid fa-xmark"></i></button></form>
+    <div class="modal-box max-w-none w-[96vw]">
+      <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <h3 class="font-bold text-lg flex items-center gap-2"><i id="galeria-icon" class="fa-solid fa-images text-info"></i> <span id="galeria-title">Galería</span></h3>
+        <div class="flex items-center gap-2">
+          <div class="join" id="galeria-cols" title="Fotos por fila">
+            <button type="button" data-cols="3" class="join-item btn btn-xs">3</button>
+            <button type="button" data-cols="4" class="join-item btn btn-xs">4</button>
+            <button type="button" data-cols="5" class="join-item btn btn-xs">5</button>
+          </div>
+          <button type="button" id="galeria-toggle-ocultas" class="btn btn-ghost btn-xs gap-1 hidden">
+            <i class="fa-solid fa-eye-slash"></i> <span></span>
+          </button>
+          <form method="dialog"><button class="btn btn-ghost btn-sm btn-circle"><i class="fa-solid fa-xmark"></i></button></form>
+        </div>
       </div>
-      <div id="galeria-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
+      <div id="galeria-toolbar" class="hidden items-center gap-3 mb-2">
+        <span id="galeria-sel-count" class="text-sm text-base-content/60">0 seleccionadas</span>
+        <button type="button" id="galeria-ocultar" class="btn btn-error btn-xs gap-1" disabled>
+          <i class="fa-solid fa-trash-can"></i> Eliminar
+        </button>
+      </div>
+      <div id="galeria-grid" class="grid gap-2"></div>
       <p id="galeria-vacio" class="hidden text-center text-base-content/50 py-8">Sin fotos.</p>
+      <div id="galeria-pager" class="hidden items-center justify-center gap-3 mt-4">
+        <button type="button" id="galeria-prev" class="btn btn-sm btn-ghost btn-circle"><i class="fa-solid fa-chevron-left"></i></button>
+        <span id="galeria-pageinfo" class="text-sm text-base-content/60"></span>
+        <button type="button" id="galeria-next" class="btn btn-sm btn-ghost btn-circle"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+
+  <dialog id="modal-foto" class="modal">
+    <div class="modal-box max-w-none w-[96vw] bg-transparent shadow-none p-0 flex items-center justify-center">
+      <img id="foto-grande" src="" alt="" class="max-h-[88vh] max-w-full object-contain rounded-lg">
+      <video id="video-grande" controls playsinline class="hidden max-h-[88vh] max-w-full rounded-lg bg-black"></video>
     </div>
     <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
   </dialog>
@@ -218,6 +247,8 @@
   const ELIMINAR_URL = "{% url 'docs:eliminar_archivo' %}";
   const ACEPTAR_ELIM_URL = "{% url 'docs:aceptar_eliminacion' %}";
   const RECHAZAR_ELIM_URL = "{% url 'docs:rechazar_eliminacion' %}";
+  const OCULTAR_URL = "{% url 'docs:ocultar_archivo' %}";
+  const RESTAURAR_URL = "{% url 'docs:restaurar_archivo' %}";
   const ASIGNAR_URL = "{% url 'docs:asignar_archivo' %}";
   const API_CARPETAS20 = "{% url 'docs:api_carpetas20' %}";
   const REFRESH_CARPETA_URL = "{% url 'docs:refrescar_carpeta' %}";
@@ -466,20 +497,30 @@
     return `<button type="button" class="js-ver btn btn-view btn-xs gap-1" data-target="files-${d.id}"><i class="fa-solid fa-eye"></i> ver</button>`;
   }
 
-  // Archivos de imagen del documento (para la galería de fotos).
+  // Archivos multimedia del documento (para las galerías de fotos/videos).
   const EXT_IMAGEN = ['JPG', 'JPEG', 'PNG', 'GIF', 'WEBP', 'BMP'];
-  function imagenesDe(d) {
-    return (d.archivos || []).filter(x => !x.pendiente_eliminar && EXT_IMAGEN.includes(extDe(x.nombre)));
+  const EXT_VIDEO = ['MP4', 'MOV', 'WEBM', 'M4V', 'AVI', 'MKV', 'MPG', 'MPEG', '3GP', 'WMV', 'FLV'];
+  function mediaDe(d, tipo) {
+    const exts = tipo === 'videos' ? EXT_VIDEO : EXT_IMAGEN;
+    return (d.archivos || []).filter(x => !x.pendiente_eliminar && exts.includes(extDe(x.nombre)));
   }
+  function imagenesDe(d) { return mediaDe(d, 'fotos'); }
 
-  // Botón "galería": solo en documentos marcados como galería (registro fotográfico)
-  // que tengan al menos una imagen. Abre un modal grande con el mosaico de fotos.
-  function galeriaBtn(d) {
+  // Botón de galería (fotos o videos): solo en documentos marcados como galería que tengan
+  // ese tipo de archivo. Abre un modal grande con el mosaico. La cuenta es de visibles (no
+  // ocultos); el admin lo ve aunque solo queden ocultos (para poder restaurarlos).
+  function _mediaBtn(d, tipo) {
     if (!d.galeria) return '';
-    const n = imagenesDe(d).length;
-    if (!n) return '';
-    return `<button type="button" class="js-galeria btn btn-view btn-xs gap-1" data-doc="${d.id}" title="Ver galería de fotos"><i class="fa-solid fa-images"></i> galería (${n})</button>`;
+    const items = mediaDe(d, tipo);
+    const vis = items.filter(x => !x.oculto).length;
+    if (!(vis > 0 || (ES_ADMIN && items.length > 0))) return '';
+    const cfg = tipo === 'videos'
+      ? { cls: 'js-videos', icon: 'fa-video', label: 'videos', title: 'Ver videos' }
+      : { cls: 'js-galeria', icon: 'fa-images', label: 'galería', title: 'Ver galería de fotos' };
+    return `<button type="button" class="${cfg.cls} btn btn-view btn-xs gap-1" data-doc="${d.id}" title="${cfg.title}"><i class="fa-solid ${cfg.icon}"></i> ${cfg.label} (${vis})</button>`;
   }
+  function galeriaBtn(d) { return _mediaBtn(d, 'fotos'); }
+  function videosBtn(d) { return _mediaBtn(d, 'videos'); }
 
   // Lista desplegable de archivos (debajo), con descarga y borrado en dos pasos.
   function verDropdown(d) {
@@ -541,7 +582,7 @@
       </div>
       <div></div>
       <div class="flex flex-col items-center gap-0.5 min-w-0">
-        <div class="flex items-center gap-2">${badgesArchivos(d)}${verBtn(d)}${galeriaBtn(d)}${obsBtn(d)}</div>
+        <div class="flex items-center gap-2">${badgesArchivos(d)}${verBtn(d)}${galeriaBtn(d)}${videosBtn(d)}${obsBtn(d)}</div>
         ${verDropdown(d)}
         ${obsDropdown(d)}
       </div>
@@ -1038,7 +1079,9 @@
     const ver = ev.target.closest('.js-ver');
     if (ver) { document.getElementById(ver.dataset.target).classList.toggle('hidden'); return; }
     const galeria = ev.target.closest('.js-galeria');
-    if (galeria) { abrirGaleria(galeria.dataset.doc); return; }
+    if (galeria) { abrirGaleria(galeria.dataset.doc, 'fotos'); return; }
+    const videos = ev.target.closest('.js-videos');
+    if (videos) { abrirGaleria(videos.dataset.doc, 'videos'); return; }
     const verObs = ev.target.closest('.js-ver-obs');
     if (verObs) { document.getElementById(verObs.dataset.target).classList.toggle('hidden'); return; }
     const enm = ev.target.closest('.js-enmendar');
@@ -1059,26 +1102,171 @@
     if (editar) { abrirModalEditar(editar.dataset.doc); return; }
   });
 
-  // ── Galería de fotos (mosaico → modal grande) ─────────────────────────────
+  // ── Galería de fotos (mosaico → modal grande, con selección/ocultar/lightbox) ──
   const modalGaleria = document.getElementById('modal-galeria');
-  const galeriaGrid = document.getElementById('modal-galeria').querySelector('#galeria-grid');
+  const galeriaGrid = document.getElementById('galeria-grid');
   const galeriaVacio = document.getElementById('galeria-vacio');
+  const galeriaToolbar = document.getElementById('galeria-toolbar');
+  const galeriaSelCount = document.getElementById('galeria-sel-count');
+  const galeriaOcultarBtn = document.getElementById('galeria-ocultar');
+  const galeriaToggleOcultas = document.getElementById('galeria-toggle-ocultas');
+  const modalFoto = document.getElementById('modal-foto');
+  const fotoGrande = document.getElementById('foto-grande');
+  const videoGrande = document.getElementById('video-grande');
+  // Al cerrar el lightbox, detén el video para que no siga sonando.
+  modalFoto.addEventListener('close', () => { videoGrande.pause(); videoGrande.removeAttribute('src'); videoGrande.load(); });
 
-  function abrirGaleria(docId) {
-    const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(docId));
-    if (!doc) return;
-    const imgs = imagenesDe(doc);
-    document.getElementById('galeria-title').textContent = `${doc.nombre} · ${imgs.length} foto${imgs.length === 1 ? '' : 's'}`;
-    galeriaGrid.innerHTML = imgs.map(x => {
-      const url = `${ARCHIVO_URL}?path=${encodeURIComponent(x.path)}`;
-      return `<a href="${url}" target="_blank" rel="noopener" class="block group relative overflow-hidden rounded-lg bg-base-200 aspect-square" title="${escapeHtml(x.nombre)}">
-        <img src="${url}" alt="${escapeHtml(x.nombre)}" loading="lazy"
-             class="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105">
-        <span class="absolute inset-x-0 bottom-0 px-2 py-1 text-[10px] text-white bg-black/50 truncate opacity-0 group-hover:opacity-100 transition-opacity">${ORIGEN_ICONO[x.origen] || ''} ${escapeHtml(x.nombre)}</span>
-      </a>`;
-    }).join('');
-    galeriaVacio.classList.toggle('hidden', imgs.length > 0);
+  // Estado de la galería abierta. `tipo` = 'fotos' | 'videos'. `cols` (items por fila) se
+  // recuerda en localStorage. `page` = página actual (0-based); se cargan de a GAL_PAGE.
+  const GAL_PAGE = 10;
+  const GAL = { docId: null, tipo: 'fotos', cols: parseInt(localStorage.getItem('seg_gal_cols')) || 4,
+                verOcultas: false, page: 0, sel: new Set() };
+
+  function _galTile(x) {
+    const url = `${ARCHIVO_URL}?path=${encodeURIComponent(x.path)}`;
+    const sel = GAL.sel.has(x.path);
+    const check = (ES_ADMIN && !x.oculto)
+      ? `<input type="checkbox" class="js-gal-check checkbox checkbox-sm absolute top-1 left-1 z-10 bg-base-100/80" data-path="${escapeHtml(x.path)}" ${sel ? 'checked' : ''}>`
+      : '';
+    const restaurar = (ES_ADMIN && x.oculto)
+      ? `<button type="button" class="js-gal-restaurar btn btn-success btn-xs absolute top-1 right-1 z-10" data-path="${escapeHtml(x.path)}" data-nombre="${escapeHtml(x.nombre)}" title="Restaurar"><i class="fa-solid fa-rotate-left"></i></button>`
+      : '';
+    const ocultaBadge = x.oculto ? '<span class="absolute top-1 left-1 z-10 badge badge-xs badge-neutral">oculta</span>' : '';
+    const visual = GAL.tipo === 'videos'
+      ? `<video src="${url}#t=0.1" preload="metadata" muted playsinline data-src="${url}"
+                class="js-media w-full h-full object-cover cursor-zoom-in"></video>
+         <span class="absolute inset-0 flex items-center justify-center pointer-events-none"><i class="fa-solid fa-circle-play text-white/90 text-3xl drop-shadow-lg"></i></span>`
+      : `<img src="${url}" alt="${escapeHtml(x.nombre)}" loading="lazy" data-src="${url}"
+              class="js-media w-full h-full object-cover cursor-zoom-in transition-transform duration-200 group-hover:scale-105">`;
+    return `<div class="relative group rounded-lg overflow-hidden bg-base-200 aspect-square ${sel ? 'ring-2 ring-error' : ''} ${x.oculto ? 'opacity-50' : ''}">
+      ${check}${restaurar}${ocultaBadge}
+      ${visual}
+      <span class="absolute inset-x-0 bottom-0 px-2 py-1 text-[10px] text-white bg-black/50 truncate opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">${ORIGEN_ICONO[x.origen] || ''} ${escapeHtml(x.nombre)}</span>
+    </div>`;
+  }
+
+  function _galUpdSel() {
+    const n = GAL.sel.size;
+    galeriaSelCount.textContent = `${n} seleccionada${n === 1 ? '' : 's'}`;
+    galeriaOcultarBtn.disabled = n === 0;
+  }
+
+  function renderGaleria() {
+    const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(GAL.docId));
+    if (!doc) { modalGaleria.close(); return; }
+    const esVid = GAL.tipo === 'videos';
+    const items = mediaDe(doc, GAL.tipo);
+    const visibles = items.filter(x => !x.oculto);
+    const ocultas = items.filter(x => x.oculto);
+    // Descarta de la selección lo que ya no esté visible (p. ej. recién ocultado).
+    GAL.sel.forEach(p => { if (!visibles.some(x => x.path === p)) GAL.sel.delete(p); });
+    const mostrar = GAL.verOcultas ? items : visibles;
+    const nom = esVid ? 'video' : 'foto';
+    document.getElementById('galeria-title').textContent =
+      `${doc.nombre} · ${visibles.length} ${nom}${visibles.length === 1 ? '' : 's'}`;
+    document.getElementById('galeria-icon').className = (esVid ? 'fa-solid fa-video' : 'fa-solid fa-images') + ' text-info';
+    galeriaVacio.textContent = esVid ? 'Sin videos.' : 'Sin fotos.';
+    // Paginación: se muestran GAL_PAGE items por página.
+    const totalPag = Math.max(1, Math.ceil(mostrar.length / GAL_PAGE));
+    if (GAL.page >= totalPag) GAL.page = totalPag - 1;
+    if (GAL.page < 0) GAL.page = 0;
+    const slice = mostrar.slice(GAL.page * GAL_PAGE, GAL.page * GAL_PAGE + GAL_PAGE);
+    galeriaGrid.style.gridTemplateColumns = `repeat(${GAL.cols}, minmax(0, 1fr))`;
+    galeriaGrid.innerHTML = slice.map(_galTile).join('');
+    galeriaVacio.classList.toggle('hidden', mostrar.length > 0);
+    const pager = document.getElementById('galeria-pager');
+    pager.classList.toggle('hidden', totalPag <= 1);
+    pager.classList.toggle('flex', totalPag > 1);
+    document.getElementById('galeria-pageinfo').textContent = `Página ${GAL.page + 1} / ${totalPag} · ${mostrar.length} en total`;
+    document.getElementById('galeria-prev').disabled = GAL.page === 0;
+    document.getElementById('galeria-next').disabled = GAL.page >= totalPag - 1;
+    galeriaToolbar.classList.toggle('hidden', !ES_ADMIN);
+    galeriaToolbar.classList.toggle('flex', ES_ADMIN);
+    document.querySelectorAll('#galeria-cols [data-cols]').forEach(b =>
+      b.classList.toggle('btn-active', parseInt(b.dataset.cols) === GAL.cols));
+    const showToggle = ES_ADMIN && ocultas.length > 0;
+    galeriaToggleOcultas.classList.toggle('hidden', !showToggle);
+    galeriaToggleOcultas.querySelector('span').textContent =
+      GAL.verOcultas ? `Ocultar (${ocultas.length})` : `Ver ocultas (${ocultas.length})`;
+    galeriaToggleOcultas.querySelector('i').className = GAL.verOcultas ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash';
+    _galUpdSel();
+  }
+
+  function abrirGaleria(docId, tipo) {
+    GAL.docId = docId; GAL.tipo = tipo || 'fotos'; GAL.sel.clear(); GAL.verOcultas = false; GAL.page = 0;
+    renderGaleria();
     modalGaleria.showModal();
+  }
+
+  document.getElementById('galeria-prev').addEventListener('click', () => { if (GAL.page > 0) { GAL.page--; renderGaleria(); } });
+  document.getElementById('galeria-next').addEventListener('click', () => { GAL.page++; renderGaleria(); });
+
+  // Fotos por fila.
+  document.getElementById('galeria-cols').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cols]'); if (!b) return;
+    GAL.cols = parseInt(b.dataset.cols); localStorage.setItem('seg_gal_cols', GAL.cols);
+    renderGaleria();
+  });
+  // Ver / ocultar las fotos ocultas (solo admin).
+  galeriaToggleOcultas.addEventListener('click', () => { GAL.verOcultas = !GAL.verOcultas; GAL.page = 0; renderGaleria(); });
+  // Grid: selección (checkbox), restaurar, o abrir la foto grande (lightbox).
+  galeriaGrid.addEventListener('click', (e) => {
+    const chk = e.target.closest('.js-gal-check');
+    if (chk) { if (chk.checked) GAL.sel.add(chk.dataset.path); else GAL.sel.delete(chk.dataset.path); renderGaleria(); return; }
+    const rest = e.target.closest('.js-gal-restaurar');
+    if (rest) { restaurarFoto(rest.dataset.path, rest.dataset.nombre); return; }
+    const media = e.target.closest('.js-media');
+    if (media) {
+      if (GAL.tipo === 'videos') {
+        fotoGrande.classList.add('hidden');
+        videoGrande.classList.remove('hidden');
+        videoGrande.src = media.dataset.src;
+        modalFoto.showModal();
+        videoGrande.play().catch(() => {});
+      } else {
+        videoGrande.classList.add('hidden');
+        fotoGrande.classList.remove('hidden');
+        fotoGrande.src = media.dataset.src;
+        modalFoto.showModal();
+      }
+      return;
+    }
+  });
+  // Ocultar (soft-delete) las seleccionadas.
+  galeriaOcultarBtn.addEventListener('click', () => {
+    const paths = [...GAL.sel];
+    if (!paths.length) return;
+    const nom = GAL.tipo === 'videos' ? 'video' : 'foto';
+    const hacer = async () => {
+      try {
+        const res = await fetch(OCULTAR_URL, { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+          body: JSON.stringify({ empresa: CUR_EMP, sitio: CUR_SITIO, paths }) });
+        const data = await res.json();
+        if (!res.ok) { window.Alert && window.Alert.error(data.error || 'No se pudo ocultar'); return; }
+        window.Alert && window.Alert.success(`${data.ocultos} ${nom}(s) ocultado(s)`, { autoHide: 4000 });
+        GAL.sel.clear();
+        await silentReload();
+        renderGaleria();
+      } catch (e) { window.Alert && window.Alert.error(e.message || 'No se pudo ocultar'); }
+    };
+    if (window.Alert && window.Alert.confirm) {
+      window.Alert.confirm(`¿Ocultar ${paths.length} ${nom}(s)? No se borran de Nextcloud; podrás restaurarlos.`,
+        hacer, null, { confirmText: 'Ocultar', confirmClass: 'btn-error', type: 'warning' });
+    } else if (confirm(`¿Ocultar ${paths.length} ${nom}(s)?`)) { hacer(); }
+  });
+
+  async function restaurarFoto(path, nombre) {
+    try {
+      const res = await fetch(RESTAURAR_URL, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify({ empresa: CUR_EMP, sitio: CUR_SITIO, path }) });
+      const data = await res.json();
+      if (!res.ok) { window.Alert && window.Alert.error(data.error || 'No se pudo restaurar'); return; }
+      window.Alert && window.Alert.success(`“${nombre}” restaurado`, { autoHide: 4000 });
+      await silentReload();
+      renderGaleria();
+    } catch (e) { window.Alert && window.Alert.error(e.message || 'No se pudo restaurar'); }
   }
 
   // ── Editar documento en modal (solo superuser) ────────────────────────────

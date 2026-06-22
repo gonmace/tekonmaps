@@ -34,8 +34,14 @@ echo 'Sembrando estructura del ITO desde JSON...'
 python manage.py seed_documentos
 
 echo 'Iniciando Gunicorn...'
+# --timeout 120: las subidas a Nextcloud pueden pasar de los 30s por defecto.
+# --max-requests: recicla workers periódicamente para acotar fugas de memoria.
 exec gunicorn core.wsgi:application \
     --bind 0.0.0.0:8000 \
-    --workers 3 \
+    --workers "${GUNICORN_WORKERS:-3}" \
+    --timeout "${GUNICORN_TIMEOUT:-120}" \
+    --graceful-timeout 30 \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
     --access-logfile - \
     --error-logfile -

@@ -30,9 +30,10 @@ class LoginFlowTests(TestCase):
 
     def test_correo_desconocido_no_autoregistra(self):
         r = self.client.post(reverse("accounts:login"),
-                             {"correo": "nadie@x.cl", "password": ""})
+                             {"correo": "nadie@x.cl", "password": "loquesea"})
         self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "No existe una cuenta")
+        # Mensaje genérico (anti-enumeración): no revela si el correo existe.
+        self.assertContains(r, "Correo o contraseña incorrectos")
         self.assertEqual(User.objects.count(), 1)
 
     def test_primer_ingreso_redirige_a_crear_password(self):

@@ -562,6 +562,26 @@ class EliminacionPendiente(models.Model):
         return f"{self.sitio} · {self.path} (pendiente)"
 
 
+class ArchivoOculto(models.Model):
+    """Imagen **oculta** (soft-delete reversible) en una galería. El archivo NO se borra de
+    Nextcloud: solo se marca para que no aparezca en la galería. Un admin puede restaurarla
+    quitando la fila. Una fila por (empresa, sitio, path)."""
+    empresa = models.CharField(max_length=100)
+    sitio = models.CharField(max_length=200)
+    path = models.CharField(max_length=500)
+    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    fecha = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Archivo oculto"
+        verbose_name_plural = "Archivos ocultos"
+        unique_together = [("empresa", "sitio", "path")]
+        ordering = ["sitio", "path"]
+
+    def __str__(self):
+        return f"{self.sitio} · {self.path} (oculto)"
+
+
 class SitioEstructura(models.Model):
     """Plantilla de estructura asignada a un sitio. Sin fila, el sitio usa la default.
     Apunta **por referencia** a la plantilla: editar la plantilla afecta a todos los

@@ -618,7 +618,7 @@
     "codigo": "",
     "tipo_esperado": "",
     "obligatorio": false,
-    "galeria": false,
+    "galeria": true,
     "orden": 5,
     "activo": true,
     "rol_buscador": "",
@@ -718,6 +718,24 @@
     "rol_ito_hse": "",
     "rol_esp_electrico": "",
     "rol_coordinador": "REVISAR"
+  },
+  {
+    "etapa": "05_SEGUIMIENTO",
+    "carpeta": "",
+    "nombre": "Carta Gantt",
+    "codigo": "",
+    "tipo_esperado": "",
+    "obligatorio": true,
+    "galeria": false,
+    "orden": 6,
+    "activo": true,
+    "rol_buscador": "",
+    "rol_tk_redline": "ELABORAR",
+    "rol_constructor": "",
+    "rol_ito": "ELABORAR",
+    "rol_ito_hse": "",
+    "rol_esp_electrico": "",
+    "rol_coordinador": "ELABORAR"
   },
   {
     "etapa": "01_HABILITACION_E_INICIO",

@@ -12,7 +12,7 @@
   <div class="overflow-x-auto">
     <table class="table">
       <thead>
-        <tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Acceso a secciones</th><th class="text-right">Acciones</th></tr>
+        <tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último ingreso</th><th>Acceso a secciones</th><th class="text-right">Acciones</th></tr>
       </thead>
       <tbody>
         {% for row in usuarios %}
@@ -35,6 +35,14 @@
             <span class="badge badge-sm badge-success badge-outline">Activo</span>
             {% else %}
             <span class="badge badge-sm badge-neutral badge-outline">Inactivo</span>
+            {% endif %}
+          </td>
+          <td class="whitespace-nowrap">
+            {% if row.u.last_login %}
+            <span title="{{ row.u.last_login|date:'d/m/Y H:i' }}">{{ row.u.last_login|date:'d M Y, H:i' }}</span>
+            <div class="text-xs text-base-content/50">hace {{ row.u.last_login|timesince }}</div>
+            {% else %}
+            <span class="text-base-content/40">Nunca</span>
             {% endif %}
           </td>
           <td>
@@ -74,7 +82,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" class="text-center text-base-content/50 py-6">Sin usuarios.</td></tr>
+        <tr><td colspan="6" class="text-center text-base-content/50 py-6">Sin usuarios.</td></tr>
         {% endfor %}
       </tbody>
     </table>

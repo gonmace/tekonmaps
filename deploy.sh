@@ -22,6 +22,16 @@ POSTGRES_DB=${POSTGRES_DB:-}
 echo "━━━ Desplegando: ${PROJECT_NAME} (${DOMAIN}) ━━━"
 echo ""
 
+# ── 0. Respaldo de la base de datos (antes de tocar nada) ──────────────────────
+# No es fatal: en el primer despliegue puede no haber BD/contenedor todavía.
+echo "▶ Respaldando la base de datos..."
+if [ -f backup-db.sh ]; then
+    bash backup-db.sh || echo "  ⚠ No se pudo respaldar (¿primer despliegue?); se continúa."
+else
+    echo "  ⚠ No existe backup-db.sh; se omite el respaldo."
+fi
+echo ""
+
 # ── 1. Detener contenedores en ejecución ──────────────────────────────────────
 echo "▶ Deteniendo contenedores..."
 docker compose --profile postgres down --remove-orphans 2>/dev/null || true
