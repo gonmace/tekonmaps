@@ -1,0 +1,72 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Docs. ITO — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="flex flex-wrap items-end justify-between gap-3 mb-4">
+  <div>
+    <h1 class="text-2xl font-bold">Documentos del ITO</h1>
+    <p class="text-base-content/60 text-sm">Documentos esperados por etapa de la plantilla seleccionada. Define la completitud que se mide en los sitios que la usan.</p>
+    <div class="flex items-center gap-2 mt-2">
+      <label class="text-sm text-base-content/70" for="sel-plantilla">Plantilla:</label>
+      <select id="sel-plantilla" class="select select-bordered select-sm"
+              onchange="location.href='{% url 'panel:documentos' %}?plantilla=' + this.value">
+        {% for p in plantillas %}
+        <option value="{{ p.id }}" {% if p.id == plantilla.id %}selected{% endif %}>{{ p.nombre }}{% if p.es_default %} (default){% endif %}</option>
+        {% endfor %}
+      </select>
+      <a href="{% url 'panel:estructuras' %}" class="btn btn-ghost btn-xs">Gestionar plantillas</a>
+    </div>
+  </div>
+  <div class="flex gap-2">
+    <a href="{% url 'panel:documentos_roles' %}?plantilla={{ plantilla.id }}" class="btn btn-ghost btn-sm">Editar responsabilidades</a>
+    <a href="{% url 'panel:documento_crear' %}?plantilla={{ plantilla.id }}" class="btn btn-info btn-sm">Nuevo documento</a>
+  </div>
+</div>
+
+<div class="card bg-base-100 border border-base-300 shadow-xs">
+  <div class="overflow-x-auto">
+    <table class="table table-sm w-full">
+      <thead>
+        <tr><th class="w-32">Etapa</th><th>Carpeta</th><th class="w-8">#</th><th>Documento</th><th class="w-16">Tipo</th><th>Responsables</th><th class="w-16">Oblig.</th><th class="w-20">Activo</th><th class="text-right">Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td class="align-top text-base-content/70">{{ item.get_etapa_display }}</td>
+          <td class="align-top text-base-content/60">{{ item.carpeta|default:"—" }}</td>
+          <td class="align-top text-base-content/50">{{ item.orden }}</td>
+          <td class="font-semibold align-top" title="{{ item.codigo|default:item.nombre }}">{{ item.nombre }}</td>
+          <td class="align-top">{% if item.tipo_esperado %}<span class="badge badge-sm badge-neutral">{{ item.tipo_esperado }}</span>{% else %}<span class="text-base-content/40">—</span>{% endif %}</td>
+          <td class="align-top">
+            <div class="flex flex-wrap gap-1 min-w-52">
+              {% for r in item.roles_resumen %}
+                <span class="badge badge-sm whitespace-nowrap {% if r.es_constructor %}badge-ghost text-base-content/60{% else %}badge-info badge-outline{% endif %}" title="{{ r.titulo }}">
+                  <span class="font-semibold">{{ r.sigla }}</span>&nbsp;{{ r.accion }}
+                </span>
+              {% empty %}<span class="text-base-content/40">—</span>{% endfor %}
+            </div>
+          </td>
+          <td class="align-top">
+            <form method="post" action="{% url 'panel:documento_toggle_obligatorio' item.pk %}" class="inline">
+              {% csrf_token %}
+              <input type="checkbox" class="toggle toggle-sm toggle-info" {% if item.obligatorio %}checked{% endif %} onchange="this.form.submit()" title="{% if item.obligatorio %}Obligatorio{% else %}Opcional{% endif %}">
+            </form>
+          </td>
+          <td class="align-top">{% if item.activo %}<span class="badge badge-sm badge-success badge-outline">Activo</span>{% else %}<span class="badge badge-sm badge-ghost">Inactivo</span>{% endif %}</td>
+          <td class="text-right whitespace-nowrap align-top">
+            <a href="{% url 'panel:documento_editar' item.pk %}" class="btn btn-edit btn-xs btn-square" title="Editar"><i class="fa-solid fa-pen"></i></a>
+            <form method="post" action="{% url 'panel:documento_eliminar' item.pk %}" class="inline" onsubmit="return confirm('¿Eliminar {{ item.nombre|escapejs }}?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-delete btn-xs btn-square" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center text-base-content/50 py-6">Sin documentos. Ejecuta <code>python manage.py seed_documentos</code> o crea el primero.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Estructuras — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <h1 class="text-2xl font-bold">Estructuras</h1>
+    <p class="text-base-content/60 text-sm">Plantillas reutilizables de documentos y responsabilidades. Guarda una estructura con un nombre y asígnala a los sitios que quieras.</p>
+  </div>
+  <a href="{% url 'panel:plantilla_crear' %}" class="btn btn-info btn-sm">Nueva plantilla</a>
+</div>
+
+{# ── Plantillas ────────────────────────────────────────────────────────────── #}
+<div class="card bg-base-100 border border-base-300 shadow-xs mb-8">
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr><th>Plantilla</th><th class="w-20 text-center">Docs.</th><th class="w-20 text-center">Sitios</th><th class="text-right">Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for p in plantillas %}
+        <tr>
+          <td>
+            <div class="flex items-center gap-2">
+              <span class="font-semibold">{{ p.nombre }}</span>
+              {% if p.es_default %}<span class="badge badge-sm badge-success badge-outline">default</span>{% endif %}
+            </div>
+            {% if p.descripcion %}<div class="text-xs text-base-content/50">{{ p.descripcion }}</div>{% endif %}
+          </td>
+          <td class="text-center text-base-content/70">{{ p.n_documentos }}</td>
+          <td class="text-center text-base-content/70">{{ p.n_sitios }}</td>
+          <td class="text-right whitespace-nowrap">
+            <a href="{% url 'panel:documentos' %}?plantilla={{ p.id }}" class="btn btn-ghost btn-xs">Editar docs.</a>
+            <a href="{% url 'panel:plantilla_editar' p.pk %}" class="btn btn-edit btn-xs">Renombrar</a>
+            <form method="post" action="{% url 'panel:plantilla_clonar' p.pk %}" class="inline"
+                  onsubmit="var n=prompt('Nombre de la nueva plantilla (copia de «{{ p.nombre|escapejs }}»):'); if(!n){return false;} this.nombre.value=n;">
+              {% csrf_token %}
+              <input type="hidden" name="nombre" value="">
+              <button type="submit" class="btn btn-ghost btn-xs">Guardar como…</button>
+            </form>
+            {% if not p.es_default %}
+            <form method="post" action="{% url 'panel:plantilla_default' p.pk %}" class="inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-ghost btn-xs">Hacer default</button>
+            </form>
+            <form method="post" action="{% url 'panel:plantilla_eliminar' p.pk %}" class="inline" onsubmit="return confirm('¿Eliminar la plantilla «{{ p.nombre|escapejs }}» y sus documentos?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-delete btn-xs">Eliminar</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center text-base-content/50 py-6">Sin plantillas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Asignación a sitios ───────────────────────────────────────────────────── #}
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <h2 class="text-xl font-bold">Asignar plantillas a sitios</h2>
+    <p class="text-base-content/60 text-sm">Cada sitio mide su completitud contra la plantilla asignada. «{% for p in plantillas %}{% if p.es_default %}{{ p.nombre }}{% endif %}{% endfor %}» (default) es el valor por omisión.</p>
+  </div>
+</div>
+
+<form method="post" action="{% url 'panel:estructura_asignar' %}">
+  {% csrf_token %}
+  <div class="card bg-base-100 border border-base-300 shadow-xs">
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr><th class="w-24">Empresa</th><th>Sitio</th><th class="w-72">Plantilla</th></tr>
+        </thead>
+        <tbody>
+          {% for s in sitios %}
+          <tr>
+            <td class="text-base-content/70">{{ s.empresa }}</td>
+            <td class="font-medium">{{ s.sitio }}</td>
+            <td>
+              <select name="sitio_{{ s.empresa }}|{{ s.sitio }}" class="select select-bordered select-sm w-full">
+                {% for p in plantillas %}
+                <option value="{{ p.id }}" {% if p.id == s.plantilla_id %}selected{% endif %}>{{ p.nombre }}{% if p.es_default %} (default){% endif %}</option>
+                {% endfor %}
+              </select>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3" class="text-center text-base-content/50 py-6">No se encontraron sitios (¿Nextcloud configurado?).</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% if sitios %}
+  <div class="mt-4 flex justify-end">
+    <button type="submit" class="btn btn-info btn-sm">Guardar asignaciones</button>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}

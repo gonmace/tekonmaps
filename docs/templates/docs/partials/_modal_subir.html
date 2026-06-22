@@ -1,0 +1,34 @@
+{% comment %}
+Modal de carga de archivos REUTILIZABLE (drag & drop + sugerencia de nombre + fecha).
+
+Markup self-contained. IDs que expone (los usa el JS de la página): file-input,
+modal-subir, dropzone, subir-file, subir-fecha, subir-fecha-row, subir-doc, subir-ok.
+La lógica (abrirModalSubir / nombreSugerido / subir, etc.) vive en la página que lo incluya.
+
+Uso:  {% include 'docs/partials/_modal_subir.html' %}
+{% endcomment %}
+<input type="file" id="file-input" class="hidden" multiple>
+
+<dialog id="modal-subir" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">Cargar archivo</h3>
+    <p id="subir-doc" class="text-sm text-base-content/60 mb-3"></p>
+    <div id="subir-fecha-row" class="hidden items-center gap-2 mb-3">
+      <label for="subir-fecha" class="text-sm text-base-content/70 flex items-center gap-1">
+        <i class="fa-regular fa-calendar text-info"></i> Fecha
+      </label>
+      <input type="date" id="subir-fecha" class="input input-bordered input-xs">
+      <span class="text-xs text-base-content/40">se añade a la sugerencia como (n-ddmmaa)</span>
+    </div>
+    <div id="dropzone" class="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-base-300 rounded-box p-8 text-center cursor-pointer hover:border-info transition-colors">
+      <i class="fa-solid fa-cloud-arrow-up text-4xl text-base-content/30"></i>
+      <p class="text-sm">Arrastra los archivos aquí o <span class="link link-info">selecciónalos</span></p>
+    </div>
+    <div id="subir-file" class="flex flex-wrap gap-1 mt-3"></div>
+    <div class="modal-action">
+      <form method="dialog"><button class="btn btn-ghost btn-sm">Cancelar</button></form>
+      <button id="subir-ok" class="btn btn-success btn-sm" disabled>Cargar</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+</dialog>

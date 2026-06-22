@@ -140,6 +140,17 @@ ENV/
 env.bak/
 venv.bak/
 
+# Despliegue (generados)
+/staticfiles/
+/db/
+volumes/
+.cache/
+# CSS compilado (se genera con: npm run build / make tailwind)
+/static/css/dist/
+# Config nginx generada por nginx-deploy.sh (usa PROJECT_NAME)
+*.conf
+!nginx.conf
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -316,3 +327,6 @@ db/
 staticfiles/
 media/
 
+
+# Archivos temporales de Office (lock files)
+~$*

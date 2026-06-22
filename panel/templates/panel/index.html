@@ -1,0 +1,50 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Panel — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  <a href="{% url 'panel:empresas' %}" class="card bg-base-100 border border-base-300 shadow-xs hover:shadow-md transition-shadow">
+    <div class="card-body">
+      <h2 class="card-title text-info"><i class="fa-solid fa-building"></i> Empresas</h2>
+      <p class="text-base-content/60">Links de Nextcloud por empresa (admin / visitante).</p>
+      <span class="text-3xl font-bold">{{ n_empresas }}</span>
+    </div>
+  </a>
+  <a href="{% url 'panel:sitios' %}" class="card bg-base-100 border border-base-300 shadow-xs hover:shadow-md transition-shadow">
+    <div class="card-body">
+      <h2 class="card-title text-info"><i class="fa-solid fa-folder-tree"></i> Docs. Finales</h2>
+      <p class="text-base-content/60">Links de Nextcloud para la sección Docs. Finales.</p>
+      <span class="text-3xl font-bold">{{ n_sitios }}</span>
+    </div>
+  </a>
+  <a href="{% url 'panel:documentos' %}" class="card bg-base-100 border border-base-300 shadow-xs hover:shadow-md transition-shadow">
+    <div class="card-body">
+      <h2 class="card-title text-info"><i class="fa-solid fa-list-check"></i> Docs. ITO</h2>
+      <p class="text-base-content/60">Lista maestra de documentos esperados del ITO por etapa.</p>
+      <span class="text-3xl font-bold">{{ n_documentos }}</span>
+    </div>
+  </a>
+  <a href="{% url 'panel:estructuras' %}" class="card bg-base-100 border border-base-300 shadow-xs hover:shadow-md transition-shadow">
+    <div class="card-body">
+      <h2 class="card-title text-info"><i class="fa-solid fa-sitemap"></i> Estructuras</h2>
+      <p class="text-base-content/60">Plantillas reutilizables de documentos/roles y su asignación a sitios.</p>
+      <span class="text-3xl font-bold">{{ n_plantillas }}</span>
+    </div>
+  </a>
+  <a href="{% url 'panel:usuarios' %}" class="card bg-base-100 border border-base-300 shadow-xs hover:shadow-md transition-shadow">
+    <div class="card-body">
+      <h2 class="card-title text-info"><i class="fa-solid fa-users"></i> Usuarios</h2>
+      <p class="text-base-content/60">Crear usuarios y asignar rol (visitante o función ITO).</p>
+      <span class="text-3xl font-bold">{{ n_usuarios }}</span>
+    </div>
+  </a>
+  <a href="{% url 'panel:caches' %}" class="card bg-base-100 border border-base-300 shadow-xs hover:shadow-md transition-shadow">
+    <div class="card-body">
+      <h2 class="card-title text-info"><i class="fa-solid fa-database"></i> Cachés</h2>
+      <p class="text-base-content/60">Estado de las cachés de Nextcloud y limpieza.</p>
+      <span class="text-3xl font-bold">{{ n_cache }}</span>
+    </div>
+  </a>
+</div>
+{% endblock %}

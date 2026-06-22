@@ -1,0 +1,82 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Sitios de {{ u.email|default:u.username }} — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <h1 class="text-2xl font-bold">Sitios asignados</h1>
+    <p class="text-sm text-base-content/60">{{ u.first_name|default:u.username }} · {{ u.email|default:u.username }}</p>
+  </div>
+  <a href="{% url 'panel:accesos' %}" class="btn btn-ghost btn-sm">Volver</a>
+</div>
+
+<div class="card bg-base-100 border border-base-300 shadow-xs">
+  <div class="card-body gap-4">
+    <div class="form-control w-full max-w-xs">
+      <label class="label" for="empresa-sel"><span class="label-text">Empresa</span></label>
+      <select id="empresa-sel" class="select select-bordered w-full">
+        <option value="">Selecciona una empresa…</option>
+        {% for e in empresas %}
+        <option value="{{ e.nombre }}">{{ e.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <form id="sitios-form" method="post" action="{% url 'panel:usuario_sitios_guardar' u.pk %}" class="hidden">
+      {% csrf_token %}
+      <input type="hidden" name="empresa" id="empresa-input" value="" />
+      <div id="sitios-lista" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4"></div>
+      <div class="flex justify-end">
+        <button type="submit" class="btn btn-save btn-sm">Guardar sitios</button>
+      </div>
+    </form>
+
+    <div id="sitios-msg" class="text-sm text-base-content/60"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var API = "{{ api_sitios_url }}";
+  var ASIGNADOS = {{ asignados_json|safe }};
+  var sel = document.getElementById('empresa-sel');
+  var form = document.getElementById('sitios-form');
+  var empresaInput = document.getElementById('empresa-input');
+  var lista = document.getElementById('sitios-lista');
+  var msg = document.getElementById('sitios-msg');
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  sel.addEventListener('change', async function () {
+    var empresa = sel.value;
+    if (!empresa) { form.classList.add('hidden'); msg.textContent = ''; return; }
+    empresaInput.value = empresa;
+    lista.innerHTML = '';
+    msg.textContent = 'Cargando sitios…';
+    var marcados = ASIGNADOS[empresa] || [];
+    try {
+      var r = await fetch(API + '?generados=1&empresa=' + encodeURIComponent(empresa));
+      var data = await r.json();
+      var sitios = data.sitios || [];
+      if (!sitios.length) { msg.textContent = 'Esta empresa no tiene sitios generados todavía.'; form.classList.add('hidden'); return; }
+      lista.innerHTML = sitios.map(function (s) {
+        var checked = marcados.indexOf(s) !== -1 ? 'checked' : '';
+        return '<label class="label cursor-pointer justify-start gap-3 px-1">' +
+          '<input type="checkbox" name="sitio" value="' + esc(s) + '" class="checkbox checkbox-sm" ' + checked + ' />' +
+          '<span class="label-text">' + esc(s) + '</span></label>';
+      }).join('');
+      msg.textContent = '';
+      form.classList.remove('hidden');
+    } catch (err) {
+      msg.textContent = 'No se pudieron cargar los sitios.';
+      form.classList.add('hidden');
+    }
+  });
+})();
+</script>
+{% endblock %}

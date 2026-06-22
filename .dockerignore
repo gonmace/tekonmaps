@@ -1,20 +1,21 @@
-# Base de datos PostgreSQL (creada por el contenedor, permisos root)
+# Datos y runtime
 db/
-
-# Git y entornos
-.git
-.venv
-venv
-env
-.env
-
-# Node (se instala en el build)
-static_src/node_modules
-
-# Django
-*.pyc
-__pycache__
 *.sqlite3
-staticfiles/
-media/
-.cache
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node
+node_modules/
+theme/static_src/node_modules/
+
+# Dev y CI
+.git/
+.github/
+*.log

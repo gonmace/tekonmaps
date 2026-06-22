@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block header %}
+{% include "header.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto w-full p-4">
+  <nav class="flex flex-wrap gap-2 mb-6">
+    <a href="{% url 'panel:index' %}" class="btn btn-sm {% if seccion == 'index' %}btn-primary{% else %}btn-ghost{% endif %}">Inicio</a>
+    <a href="{% url 'panel:empresas' %}" class="btn btn-sm {% if seccion == 'empresas' %}btn-primary{% else %}btn-ghost{% endif %}">Empresas</a>
+    <a href="{% url 'panel:sitios' %}" class="btn btn-sm {% if seccion == 'sitios' %}btn-primary{% else %}btn-ghost{% endif %}">Docs. Finales</a>
+    <a href="{% url 'panel:documentos' %}" class="btn btn-sm {% if seccion == 'documentos' %}btn-primary{% else %}btn-ghost{% endif %}">Docs. ITO</a>
+    <a href="{% url 'panel:estructuras' %}" class="btn btn-sm {% if seccion == 'estructuras' %}btn-primary{% else %}btn-ghost{% endif %}">Estructuras</a>
+    <a href="{% url 'panel:usuarios' %}" class="btn btn-sm {% if seccion == 'usuarios' %}btn-primary{% else %}btn-ghost{% endif %}">Usuarios</a>
+    <a href="{% url 'panel:accesos' %}" class="btn btn-sm {% if seccion == 'accesos' %}btn-primary{% else %}btn-ghost{% endif %}">Accesos</a>
+    <a href="{% url 'panel:caches' %}" class="btn btn-sm {% if seccion == 'caches' %}btn-primary{% else %}btn-ghost{% endif %}">Cachés</a>
+  </nav>
+
+  {% block panel %}{% endblock %}
+</div>
+
+{# Confirmación vía toast (window.Alert) para cualquier form con data-confirm #}
+<script>
+(function () {
+  function bind() {
+    document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+      if (form._confirmBound) return;
+      form._confirmBound = true;
+      form.addEventListener('submit', function (e) {
+        if (form._confirmed) return;            // ya confirmado → deja pasar
+        e.preventDefault();
+        if (!window.Alert) { form._confirmed = true; form.submit(); return; }
+        window.Alert.confirm(
+          form.getAttribute('data-confirm'),
+          function () { form._confirmed = true; form.submit(); },
+          null,
+          {
+            title: form.getAttribute('data-confirm-title') || 'Confirmar',
+            confirmText: form.getAttribute('data-confirm-ok') || 'Confirmar',
+            confirmClass: form.getAttribute('data-confirm-class') || 'btn-save',
+            type: form.getAttribute('data-confirm-type') || 'warning',
+            icon: form.getAttribute('data-confirm-icon') || 'fa-solid fa-circle-question',
+          }
+        );
+      });
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+  else bind();
+})();
+</script>
+{% endblock %}
+
+{% block footer %}
+{% include "footer.html" %}
+{% endblock %}

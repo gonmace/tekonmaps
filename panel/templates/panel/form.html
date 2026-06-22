@@ -1,0 +1,35 @@
+{% extends "panel/base.html" %}
+
+{% block title %}{{ titulo }} — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="card bg-base-100 border border-base-300 shadow-xs max-w-xl">
+  <div class="card-body">
+    <h2 class="card-title">{{ titulo }}</h2>
+    {% if subtitulo %}<p class="text-base-content/60 -mt-2">{{ subtitulo }}</p>{% endif %}
+
+    <form method="post" class="space-y-4 mt-2">
+      {% csrf_token %}
+      {% for field in form %}
+      <div class="form-control w-full">
+        <label class="label" for="{{ field.id_for_label }}">
+          <span class="label-text">{{ field.label }}</span>
+        </label>
+        {{ field }}
+        {% if field.help_text %}
+        <span class="label-text-alt text-base-content/50 mt-1">{{ field.help_text }}</span>
+        {% endif %}
+        {% for error in field.errors %}
+        <span class="label-text-alt text-error mt-1">{{ error }}</span>
+        {% endfor %}
+      </div>
+      {% endfor %}
+
+      <div class="flex gap-2 justify-end pt-2">
+        <a href="{% url volver %}" class="btn btn-ghost btn-sm">Cancelar</a>
+        <button type="submit" class="btn btn-success btn-sm">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Docs. Finales — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-2xl font-bold">Docs. Finales</h1>
+  <a href="{% url 'panel:sitio_crear' %}" class="btn btn-info btn-sm">Nueva configuración</a>
+</div>
+
+<div class="card bg-base-100 border border-base-300 shadow-xs">
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr><th>Clave</th><th>Link admin</th><th>Link visitante</th><th>Descripción</th><th class="text-right">Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td class="font-semibold">{{ item.clave }}</td>
+          <td class="max-w-xs truncate text-base-content/70">{{ item.link_admin|default:"—" }}</td>
+          <td class="max-w-xs truncate text-base-content/70">{{ item.link_visitante|default:"—" }}</td>
+          <td class="text-base-content/70">{{ item.descripcion|default:"—" }}</td>
+          <td class="text-right whitespace-nowrap">
+            <a href="{% url 'panel:sitio_editar' item.pk %}" class="btn btn-edit btn-xs">Editar</a>
+            <form method="post" action="{% url 'panel:sitio_eliminar' item.pk %}" class="inline" onsubmit="return confirm('¿Eliminar {{ item.clave|escapejs }}?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-delete btn-xs">Eliminar</button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-base-content/50 py-6">Sin configuraciones. Crea la primera.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

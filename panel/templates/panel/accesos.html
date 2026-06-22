@@ -1,0 +1,46 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Accesos — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-2xl font-bold">Accesos por sitio</h1>
+</div>
+<p class="text-sm text-base-content/60 mb-4">
+  Cada usuario solo puede ver los sitios que tenga asignados. Sin asignaciones no ve ningún sitio.
+  El superusuario ve todo y no aparece en esta lista.
+</p>
+
+<div class="card bg-base-100 border border-base-300 shadow-xs">
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr><th>Usuario</th><th>Rol</th><th>Sitios</th><th class="text-right">Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for row in usuarios %}
+        <tr>
+          <td class="font-semibold">
+            {{ row.u.first_name|default:row.u.username }}
+            <div class="text-xs font-normal text-base-content/60">{{ row.u.email|default:row.u.username }}</div>
+          </td>
+          <td>{{ row.rol }}</td>
+          <td>
+            {% if row.n_sitios %}
+            <span class="badge badge-sm badge-info badge-outline">{{ row.n_sitios }} sitio{{ row.n_sitios|pluralize }}</span>
+            {% else %}
+            <span class="badge badge-sm badge-neutral badge-outline">Sin acceso</span>
+            {% endif %}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <a href="{% url 'panel:usuario_sitios' row.u.pk %}" class="btn btn-edit btn-xs">Asignar sitios</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center text-base-content/50 py-6">Sin usuarios.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

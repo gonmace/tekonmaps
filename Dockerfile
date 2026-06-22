@@ -1,44 +1,34 @@
-# Dockerfile para PRODUCCIÓN
-# Uso: docker compose up -d
+# ── Stage 1: compilar CSS con Node (solo build, no va a producción) ─────────────
+FROM node:22-slim AS css-builder
 
-FROM node:22-alpine AS frontend
+# Copiar todo el proyecto para que Tailwind escanee templates al compilar
+COPY . /app/
 
-WORKDIR /app
+WORKDIR /app/theme/static_src
 
-# Copiar todo lo necesario para el build (templates y docs para @source)
-COPY static_src/ ./static_src/
-COPY templates/ ./templates/
-COPY docs/ ./docs/
+# npm ci instala exactamente lo que dice package-lock.json
+RUN npm ci && npm run build
 
-WORKDIR /app/static_src
-
-# Build de Tailwind + DaisyUI
-RUN npm install
-RUN npm run build
-
+# ── Stage 2: imagen Python de producción (sin Node ni módulos npm) ─────────────
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV DJANGO_SETTINGS_MODULE=core.settings
 
 WORKDIR /app
 
-# Instalar dependencias del sistema para psycopg2
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     libpq-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar dependencias Python
-COPY requirements/ ./requirements/
-RUN pip install --no-cache-dir -r requirements/prod.txt
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar proyecto
-COPY . .
+COPY ./ ./
 
-# Copiar CSS compilado desde stage frontend
-COPY --from=frontend /app/static_src/../static/css/main.css /app/static/css/main.css
-
-EXPOSE 8000
+# CSS ya compilado y minificado desde la stage anterior
+COPY --from=css-builder /app/static/css/dist/ ./static/css/dist/
 
 CMD ["sh", "entrypoint.sh"]

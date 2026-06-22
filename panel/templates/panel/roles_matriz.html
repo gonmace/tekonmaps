@@ -1,0 +1,54 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Responsabilidades — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <h1 class="text-2xl font-bold">Responsabilidades por documento</h1>
+    <p class="text-base-content/60 text-sm">Plantilla «{{ plantilla.nombre }}». Asigna la acción de cada rol (incluido Constructor) por documento. «—» = no participa.</p>
+  </div>
+  <a href="{% url 'panel:documentos' %}?plantilla={{ plantilla.id }}" class="btn btn-ghost btn-sm">Volver</a>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="card bg-base-100 border border-base-300 shadow-xs">
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th class="sticky left-0 bg-base-100">Documento</th>
+            {% for campo, lbl, sigla in roles %}<th class="text-center" title="{{ lbl }}">{{ sigla }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for fila in filas %}
+          <tr>
+            <td class="sticky left-0 bg-base-100">
+              <div class="text-xs text-base-content/50">{{ fila.doc.get_etapa_display }}{% if fila.doc.carpeta %} · {{ fila.doc.carpeta }}{% endif %}</div>
+              <div class="font-semibold max-w-xs truncate" title="{{ fila.doc.codigo|default:fila.doc.nombre }}">{{ fila.doc.orden }}. {{ fila.doc.nombre }}</div>
+            </td>
+            {% for celda in fila.celdas %}
+            <td class="text-center">
+              <select name="{{ celda.name }}" class="select select-bordered select-xs w-28">
+                <option value="">—</option>
+                {% for val, alabel in acciones %}
+                <option value="{{ val }}" {% if celda.actual == val %}selected{% endif %}>{{ alabel }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            {% endfor %}
+          </tr>
+          {% empty %}
+          <tr><td colspan="{{ roles|length|add:1 }}" class="text-center text-base-content/50 py-6">Sin documentos.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="mt-4 flex justify-end">
+    <button type="submit" class="btn btn-info btn-sm">Guardar cambios</button>
+  </div>
+</form>
+{% endblock %}

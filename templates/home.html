@@ -7,11 +7,11 @@
 
 {% block content %}
 <div class="min-h-screen flex flex-col items-center justify-center p-4">
-    <h1 class="text-4xl font-bold text-primary mb-4">Tk Redline</h1>
+    <img src="{% static 'img/logo-tk-rl.png' %}" alt="Tk Redline" class="logo-light h-20 w-auto mb-6" />
+    <img src="{% static 'img/logo-tk-rl-dark.png' %}" alt="Tk Redline" class="logo-dark h-20 w-auto mb-6" />
     <div class="flex flex-wrap gap-3 justify-center">
-      <a href="{% url 'docs:index' %}" class="btn btn-primary">Docs. Contratista</a>
-      <a href="{% url 'docs:final' %}" class="btn btn-primary">Docs. Finales</a>
-      <a href="{% url 'admin:index' %}" class="btn btn-outline">Ir al Admin</a>
+      <a href="{% url 'docs:index' %}" class="btn btn-info">Docs. Contratista</a>
+      <a href="{% url 'docs:final' %}" class="btn btn-info">Docs. Finales</a>
     </div>
 </div>
 {% endblock %}

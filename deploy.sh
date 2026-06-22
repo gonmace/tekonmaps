@@ -1,77 +1,63 @@
 #!/bin/bash
-# -*- ENCODING: UTF-8 -*-
+# deploy.sh — despliega el proyecto en el VPS
+# Uso: bash deploy.sh   (o: make deploy)
 
-read -p "Nombre de la App: " app
-read -p "Dominio: " dominio
-read -p "Puerto: " puerto
-cat > ${app} <<EOF
-# /etc/nginx/sites-available/$app
+set -e
 
-upstream web_$app {
-    server django:$puerto;
-}
-server {
-    server_name $dominio www.${dominio};
+# ── Cargar variables del .env ──────────────────────────────────────────────────
+if [ ! -f .env ]; then
+    echo "Error: no se encontró el archivo .env. Ejecuta: bash setup.sh"
+    exit 1
+fi
+set -a
+source .env
+set +a
 
-    location = /favicon.ico { 
-        access_log off; 
-        log_not_found off; 
-        }
+PROJECT_NAME=${PROJECT_NAME:?La variable PROJECT_NAME no está definida en .env}
+APP_PORT=${APP_PORT:-8000}
+DOMAIN=${DOMAIN:?La variable DOMAIN no está definida en .env}
+POSTGRES_MODE=${POSTGRES_MODE:-container}
+POSTGRES_DB=${POSTGRES_DB:-}
 
-    location /static/ {
-        autoindex on;
-        alias $PWD/staticfiles/;
-        }
-    
-    location /media/ {
-        autoindex on;
-        alias $PWD/media/;
-        }
+echo "━━━ Desplegando: ${PROJECT_NAME} (${DOMAIN}) ━━━"
+echo ""
 
-    location / {
-        proxy_pass http://web_$app;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header Host \$host;
-        proxy_redirect off;    
-        }
-}
-EOF
+# ── 1. Detener contenedores en ejecución ──────────────────────────────────────
+echo "▶ Deteniendo contenedores..."
+docker compose --profile postgres down --remove-orphans 2>/dev/null || true
+docker network prune -f 2>/dev/null || true
+echo ""
 
-cat > docker-compose.yml <<EOF
-version: "3.9"
+# ── 2. Verificar puertos disponibles ──────────────────────────────────────────
+echo "▶ Verificando puertos..."
+if ! bash check-ports.sh; then
+    echo ""
+    echo "Error: hay puertos ocupados. Resuelve los conflictos antes de continuar."
+    exit 1
+fi
+echo ""
 
-services:
+# ── 3. Actualizar código ───────────────────────────────────────────────────────
+echo "▶ Actualizando código..."
+git pull origin main
 
-  django:
-    container_name: Django
-    build: .
-    restart: always
-    ports:
-    - $puerto:8000
-    volumes:
-    - ./:/app
-    depends_on:
-      - db
+# ── 4. Construir lista de profiles ────────────────────────────────────────────
+PROFILES=""
 
-  db:
-    image: postgres:14.3-alpine3.16
-    container_name: postgres
-    ports:
-      - 5431:5432
-    environment:
-      - POSTGRES_DB=base
-      - POSTGRES_USER=magoreal
-      - POSTGRES_PASSWORD=ojalaque
-    volumes:
-      - ./db:/var/lib/postgresql/data
-EOF
+if [ -z "${POSTGRES_DB}" ]; then
+    echo "  Base de datos: SQLite (db.sqlite3 montado en el contenedor)"
+elif [ "${POSTGRES_MODE}" = "container" ]; then
+    PROFILES="${PROFILES} --profile postgres"
+    echo "  PostgreSQL: contenedor Docker"
+else
+    echo "  PostgreSQL: servidor host (${POSTGRES_HOST:-host.docker.internal})"
+    echo "  Asegúrate de que pg_hba.conf permita conexiones desde Docker (172.17.0.0/16)"
+fi
 
-sudo mv .env.sample .env
-sudo cp $app /etc/nginx/sites-available/$app
-sudo ln -s /etc/nginx/sites-available/$app /etc/nginx/sites-enabled/$app
-nginx -t
+# ── 5. Reconstruir y reiniciar contenedores ────────────────────────────────────
+echo ""
+echo "▶ Reconstruyendo contenedores Docker..."
+docker compose ${PROFILES} up -d --build
 
-
-# sudo docker-compose up -d --build
-
-exit
+echo ""
+echo "✓ Despliegue completado → https://${DOMAIN}"

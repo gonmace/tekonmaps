@@ -11,48 +11,45 @@
 <div class="min-h-[calc(100vh-8rem)] flex flex-col items-center justify-center p-4">
   <div class="card w-full max-w-xs bg-base-100 shadow-xl border border-base-300">
     <div class="card-body">
-      <h1 class="card-title text-2xl justify-center text-primary mb-2">Tk Redline</h1>
-      <p class="text-center text-base-content/70 mb-6">Inicia sesión para acceder a la documentación</p>
+      <img src="{% static 'img/logo-tk-rl.png' %}" alt="Tk Redline" class="logo-light h-14 w-auto mx-auto mb-2" />
+      <img src="{% static 'img/logo-tk-rl-dark.png' %}" alt="Tk Redline" class="logo-dark h-14 w-auto mx-auto mb-2" />
+      <p class="text-center text-base-content/70 mb-4">Inicia sesión para acceder a la documentación</p>
 
-      {% if form.non_field_errors %}
+      {% if error %}
       <div class="alert alert-error mb-4">
-        {% for error in form.non_field_errors %}
         <span>{{ error }}</span>
-        {% endfor %}
       </div>
       {% endif %}
+
+      <div class="alert alert-info text-sm mb-4 items-start gap-2">
+        <i class="fa-solid fa-circle-info mt-0.5"></i>
+        <span><span class="font-semibold">¿Es tu primera vez?</span> Escribe solo tu correo y
+          presiona <span class="font-semibold">Entrar</span> (deja la contraseña vacía).
+          En la siguiente pantalla crearás tu contraseña.</span>
+      </div>
 
       <form method="post" action="{% url 'accounts:login' %}" class="space-y-4">
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ next }}" />
 
         <div class="form-control w-full">
-          <label class="label" for="id_username">
-            <span class="label-text">Usuario</span>
+          <label class="label" for="id_correo">
+            <span class="label-text">Correo</span>
           </label>
-          <input type="text" name="username" id="id_username" autofocus autocomplete="username"
-            class="input input-bordered w-full {% if form.username.errors %}input-error{% endif %}"
-            placeholder="Usuario"
-            value="{{ form.username.value|default:'' }}" />
-          {% if form.username.errors %}
-          <label class="label">
-            <span class="label-text-alt text-error">{{ form.username.errors.0 }}</span>
-          </label>
-          {% endif %}
+          <input type="email" name="correo" id="id_correo" autofocus autocomplete="username"
+            class="input input-bordered w-full"
+            placeholder="correo@ejemplo.com"
+            value="{{ correo|default:'' }}" />
         </div>
 
         <div class="form-control w-full">
           <label class="label" for="id_password">
             <span class="label-text">Contraseña</span>
+            <span class="label-text-alt text-base-content/50">vacía en el 1er ingreso</span>
           </label>
           <input type="password" name="password" id="id_password" autocomplete="current-password"
-            class="input input-bordered w-full {% if form.password.errors %}input-error{% endif %}"
-            placeholder="Contraseña" />
-          {% if form.password.errors %}
-          <label class="label">
-            <span class="label-text-alt text-error">{{ form.password.errors.0 }}</span>
-          </label>
-          {% endif %}
+            class="input input-bordered w-full"
+            placeholder="Déjala vacía si es tu primera vez" />
         </div>
 
         <div class="card-actions justify-center mt-6">

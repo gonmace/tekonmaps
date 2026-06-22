@@ -68,9 +68,9 @@ case "$DUMP_FILE" in
       sleep 2
     done
 
-    [ "$DROP_DB" = 1 ] && echo "Limpiando datos existentes..." && $COMPOSE_CMD exec -T django python manage.py flush --no-input --settings=core.settings.prod
+    [ "$DROP_DB" = 1 ] && echo "Limpiando datos existentes..." && $COMPOSE_CMD exec -T django python manage.py flush --no-input
     echo "Aplicando migraciones..."
-    $COMPOSE_CMD exec -T django python manage.py migrate --settings=core.settings.prod
+    $COMPOSE_CMD exec -T django python manage.py migrate
 
     # Filtrar modelos obsoletos (ej. DocCarpeta eliminado) antes de cargar
     FILTERED="${BACKUP_DIR}/filtered_load_$$.json"
@@ -79,7 +79,7 @@ case "$DUMP_FILE" in
 
     echo "Cargando datos desde $DUMP_FILE..."
     LOAD_PATH="/app/${FILTERED#./}"
-    $COMPOSE_CMD exec -T django python manage.py loaddata "$LOAD_PATH" --settings=core.settings.prod
+    $COMPOSE_CMD exec -T django python manage.py loaddata "$LOAD_PATH"
     echo "Restore completado."
     ;;
   *.sqlite3|*.db)

@@ -1,13 +1,42 @@
-# Producción - Gunicorn
 services:
-  django:
-    container_name: pti-tekon-rl-cl-django
-    build: .
-    restart: always
-    ports:
-      - 8008:8000
+  postgres:
+    profiles: [postgres]
+    image: postgres:17-alpine
+    container_name: ${PROJECT_NAME}_db
+    env_file:
+      - .env
     volumes:
-      - ./:/app
+      - ./db:/var/lib/postgresql/data/
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  django:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${PROJECT_NAME}_app
+    restart: always
+    env_file:
+      - .env
     environment:
-      - DJANGO_SETTINGS_MODULE=core.settings.prod
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - POSTGRES_HOST=postgres  # dentro de Docker el hostname es el nombre del servicio
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
+      # SQLite por defecto: persistir la BD fuera de la imagen.
+      # Si usas PostgreSQL (perfil postgres) este montaje es inofensivo.
+      - ./db.sqlite3:/app/db.sqlite3
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    networks:
+      - app_network
+
+networks:
+  app_network:

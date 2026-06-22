@@ -1,12 +1,16 @@
-{% load static %}
+{% load static tailwind_tags %}
 <!DOCTYPE html>
-<html lang="es" data-theme="tkredline" id="html-root">
+<html lang="es" data-theme="light" id="html-root">
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="x-ua-compatible" content="ie=edge" />
     <title>{% block title %}Tk Redline{% endblock %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link href="{% static 'css/main.css' %}" rel="stylesheet" type="text/css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6/css/all.min.css" rel="stylesheet">
+    {% tailwind_css %}
     {% block css %}{% endblock %}
     {% block javascript_top %}{% endblock %}
 </head>
@@ -18,6 +22,19 @@
     {% block inline_javascript %}{% endblock %}
     {% block extra_js %}{% endblock %}
 
+    <!-- Componente de toasts/alerts (DaisyUI) reutilizable -->
+    <script src="{% static 'js/components/alert-component.js' %}"></script>
+
+    {% if messages %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            {% for message in messages %}
+            if (window.Alert) window.Alert.show('{{ message|escapejs }}', '{{ message.tags }}', { autoHide: 5000 });
+            {% endfor %}
+        });
+    </script>
+    {% endif %}
+
     <script>
         // Persistir tema en localStorage
         const root = document.getElementById('html-root');
@@ -26,14 +43,14 @@
 
         const themeToggle = document.getElementById('theme-toggle');
         if (themeToggle) themeToggle.addEventListener('change', function() {
-            const theme = this.checked ? 'tkredline-dark' : 'tkredline';
+            const theme = this.checked ? 'dark' : 'light';
             root.setAttribute('data-theme', theme);
             localStorage.setItem('theme', theme);
         });
 
         // Sincronizar el toggle con el tema guardado
         const currentTheme = root.getAttribute('data-theme');
-        if (themeToggle && currentTheme === 'tkredline-dark') {
+        if (themeToggle && currentTheme === 'dark') {
             themeToggle.checked = true;
         }
     </script>

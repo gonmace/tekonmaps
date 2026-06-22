@@ -1,0 +1,14 @@
+{% for field in form %}
+<div class="form-control w-full">
+  <label class="label" for="{{ field.id_for_label }}">
+    <span class="label-text">{{ field.label }}</span>
+  </label>
+  {{ field }}
+  {% if field.help_text %}
+  <span class="label-text-alt text-base-content/50 mt-1">{{ field.help_text }}</span>
+  {% endif %}
+  {% for error in field.errors %}
+  <span class="label-text-alt text-error mt-1">{{ error }}</span>
+  {% endfor %}
+</div>
+{% endfor %}

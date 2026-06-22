@@ -1,0 +1,117 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Cachés — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <h1 class="text-2xl font-bold">Cachés</h1>
+    <p class="text-base-content/60 text-sm">Datos cacheados de Nextcloud. Al limpiar, se regeneran en la próxima visita.</p>
+  </div>
+  <form method="post" onsubmit="return confirm('¿Limpiar TODAS las cachés?');">
+    {% csrf_token %}
+    <input type="hidden" name="target" value="todo">
+    <button type="submit" class="btn btn-delete btn-sm">Limpiar todo</button>
+  </form>
+</div>
+
+{# Estructura #}
+<div class="card bg-base-100 border border-base-300 shadow-xs mb-4">
+  <div class="card-body">
+    <div class="flex items-center justify-between">
+      <h2 class="card-title text-base">Estructura por empresa <span class="badge badge-sm badge-neutral">{{ estructura|length }}</span></h2>
+      <form method="post" onsubmit="return confirm('¿Limpiar caché de estructura?');">
+        {% csrf_token %}<input type="hidden" name="target" value="estructura">
+        <button class="btn btn-delete btn-xs" type="submit">Limpiar</button>
+      </form>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead><tr><th>Empresa</th><th>Actualizado</th></tr></thead>
+        <tbody>
+          {% for e in estructura %}
+          <tr><td>{{ e.empresa }}</td><td class="text-base-content/60">{{ e.fetched_at|date:"d M Y H:i" }}</td></tr>
+          {% empty %}
+          <tr><td colspan="2" class="text-center text-base-content/50 py-4">Vacío</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# Sitios #}
+<div class="card bg-base-100 border border-base-300 shadow-xs mb-4">
+  <div class="card-body">
+    <div class="flex items-center justify-between">
+      <h2 class="card-title text-base">Sitios <span class="badge badge-sm badge-neutral">{{ sitios|length }}</span></h2>
+      <form method="post" onsubmit="return confirm('¿Limpiar caché de sitios?');">
+        {% csrf_token %}<input type="hidden" name="target" value="sitios">
+        <button class="btn btn-delete btn-xs" type="submit">Limpiar</button>
+      </form>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead><tr><th>Empresa</th><th>Sitio</th><th>Última act.</th></tr></thead>
+        <tbody>
+          {% for s in sitios %}
+          <tr><td>{{ s.empresa }}</td><td>{{ s.sitio }}</td><td class="text-base-content/60">{{ s.ultima_actualizacion|default:"—" }}</td></tr>
+          {% empty %}
+          <tr><td colspan="3" class="text-center text-base-content/50 py-4">Vacío</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# Proyectos finales #}
+<div class="card bg-base-100 border border-base-300 shadow-xs mb-4">
+  <div class="card-body">
+    <div class="flex items-center justify-between">
+      <h2 class="card-title text-base">Proyectos finales <span class="badge badge-sm badge-neutral">{{ proyectos|length }}</span></h2>
+      <form method="post" onsubmit="return confirm('¿Limpiar caché de proyectos finales?');">
+        {% csrf_token %}<input type="hidden" name="target" value="proyectos">
+        <button class="btn btn-delete btn-xs" type="submit">Limpiar</button>
+      </form>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead><tr><th>Proyecto</th><th>Última act.</th></tr></thead>
+        <tbody>
+          {% for p in proyectos %}
+          <tr><td>{{ p.nombre }}</td><td class="text-base-content/60">{{ p.ultima_actualizacion|default:"—" }}</td></tr>
+          {% empty %}
+          <tr><td colspan="2" class="text-center text-base-content/50 py-4">Vacío</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# Seguimiento ITO #}
+<div class="card bg-base-100 border border-base-300 shadow-xs">
+  <div class="card-body">
+    <div class="flex items-center justify-between">
+      <h2 class="card-title text-base">Seguimiento ITO <span class="badge badge-sm badge-neutral">{{ seguimiento|length }}</span></h2>
+      <form method="post" onsubmit="return confirm('¿Limpiar caché de seguimiento ITO?');">
+        {% csrf_token %}<input type="hidden" name="target" value="seguimiento">
+        <button class="btn btn-delete btn-xs" type="submit">Limpiar</button>
+      </form>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead><tr><th>Sitio</th><th>Actualizado</th></tr></thead>
+        <tbody>
+          {% for s in seguimiento %}
+          <tr><td>{{ s.sitio }}</td><td class="text-base-content/60">{{ s.fetched_at|date:"d M Y H:i" }}</td></tr>
+          {% empty %}
+          <tr><td colspan="2" class="text-center text-base-content/50 py-4">Vacío</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

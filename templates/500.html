@@ -1,11 +1,11 @@
-{% load static %}
+{% load static tailwind_tags %}
 <!DOCTYPE html>
-<html lang="es" data-theme="tkredline">
+<html lang="es" data-theme="light">
 <head>
     <meta charset="utf-8" />
     <title>Error del servidor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link href="{% static 'css/main.css' %}" rel="stylesheet" type="text/css" />
+    {% tailwind_css %}
 </head>
 <body class="min-h-screen flex items-center justify-center">
     <div class="text-center">

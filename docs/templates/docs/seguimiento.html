@@ -1,0 +1,1316 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Seguimiento — Tk Redline{% endblock %}
+
+{% block header %}{% include 'header.html' %}{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1800px] mx-auto px-4 sm:px-6 py-8">
+  {% csrf_token %}
+
+  <dialog id="modal-confirm" class="modal">
+    <div class="modal-box">
+      <h3 id="modal-confirm-title" class="font-bold text-lg">Confirmar revisión</h3>
+      <p id="modal-confirm-text" class="py-3 text-base-content/80"></p>
+      <!-- Nota de "observación": se revela al elegir esa opción. -->
+      <div id="modal-confirm-obs" class="hidden">
+        <label class="label-text font-medium">Observación (qué corregir)</label>
+        <textarea id="modal-confirm-obs-text" class="textarea textarea-bordered w-full mt-1" rows="3"
+                  placeholder="Describe qué debe corregirse…"></textarea>
+      </div>
+      <div class="modal-action gap-2">
+        <form method="dialog"><button class="btn btn-ghost btn-sm">Cancelar</button></form>
+        <button id="modal-confirm-noconforme" class="btn btn-warning btn-sm gap-1">
+          <i class="fa-solid fa-triangle-exclamation"></i> Observación
+        </button>
+        <button id="modal-confirm-ok" class="btn btn-success btn-sm">Conforme</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+
+  <dialog id="modal-obs" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation text-warning"></i> <span id="modal-obs-title">Observación TK Redline</span></h3>
+      <p id="modal-obs-doc" class="text-sm text-base-content/60 mt-1 mb-2 break-words"></p>
+      <textarea id="modal-obs-text" class="textarea textarea-bordered w-full" rows="3"
+                placeholder="Describe la observación…"></textarea>
+      <div class="modal-action gap-2">
+        <form method="dialog"><button class="btn btn-ghost btn-sm">Cancelar</button></form>
+        <button id="modal-obs-ok" class="btn btn-warning btn-sm gap-1"><i class="fa-solid fa-check"></i> Guardar</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+
+  {% include 'docs/partials/_modal_subir.html' %}
+
+  <dialog id="modal-editar" class="modal">
+    <div class="modal-box max-w-xl">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-3 top-3" aria-label="Cerrar">✕</button>
+      </form>
+      <h3 class="font-bold text-lg mb-3">Editar documento</h3>
+      <form id="editar-form" class="space-y-4"></form>
+      <div class="modal-action">
+        <form method="dialog"><button class="btn btn-ghost btn-sm">Cancelar</button></form>
+        <button id="editar-ok" class="btn btn-success btn-sm">Guardar</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+
+  <dialog id="modal-asignar" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Asignar a documento</h3>
+      <p id="asignar-file" class="text-sm text-base-content/60 mb-3 break-all"></p>
+      <select id="asignar-doc" class="select select-bordered w-full"></select>
+      <div class="modal-action">
+        <form method="dialog"><button class="btn btn-ghost btn-sm">Cancelar</button></form>
+        <button id="asignar-ok" class="btn btn-info btn-sm">Asignar</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+
+  <div class="flex flex-wrap items-end gap-3 mb-8">
+    <div class="form-control w-full sm:w-auto">
+      <span class="label-text font-medium">Empresa</span>
+      <select id="empresa-select" class="select select-bordered select-sm w-full sm:w-40">
+        {% for e in empresas %}
+        <option value="{{ e.nombre }}">{{ e.nombre_display }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-control w-full sm:w-auto sm:min-w-72">
+      <span class="label-text font-medium">Sitio</span>
+      <select id="sitio-select" class="select select-bordered select-sm w-full sm:w-72">
+        <option value="">Selecciona un sitio…</option>
+      </select>
+    </div>
+    {% if es_superuser %}
+    <div class="form-control w-full sm:w-auto">
+      <span class="label-text font-medium">Refrescar carpeta</span>
+      <div class="flex gap-1">
+        <select id="refresh-carpeta" class="select select-bordered select-sm w-full sm:w-44" title="Carpeta /20* a re-escanear"></select>
+        <button id="refresh-carpeta-btn" type="button" class="btn btn-info btn-sm" title="Re-escanear solo esa carpeta para el sitio actual" disabled>
+          <i class="fa-solid fa-rotate"></i>
+        </button>
+      </div>
+    </div>
+    <div id="estructura-control" class="form-control w-full sm:w-auto hidden">
+      <span class="label-text font-medium">Estructura del sitio</span>
+      <div class="flex items-center gap-2">
+        <span id="estructura-chip" class="badge badge-ghost badge-sm whitespace-nowrap" title="Plantilla en uso por el sitio"></span>
+        <button id="actualizar-estructura-btn" type="button" class="btn btn-warning btn-sm gap-1" title="Capturar las carpetas reales del sitio (etapas + subcarpetas) como su estructura" disabled>
+          <i class="fa-solid fa-arrows-rotate"></i> Actualizar estructura
+        </button>
+      </div>
+    </div>
+    <a id="editar-documentos-link" href="{% url 'panel:documentos' %}" target="_blank" rel="noopener" class="btn btn-edit btn-sm gap-1 self-end" title="Editar lista de documentos del ITO">
+      <i class="fa-solid fa-pen"></i> Editar documentos
+    </a>
+    {% endif %}
+  </div>
+
+  <div id="loading" class="flex flex-col items-center justify-center py-20 text-base-content/50 hidden">
+    <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
+    <p class="text-sm">Cargando seguimiento…</p>
+  </div>
+
+  <div id="error" class="hidden"></div>
+
+  <div id="placeholder" class="flex flex-col items-center justify-center py-20 text-base-content/40">
+    <i class="fa-solid fa-clipboard-check text-5xl mb-4"></i>
+    <p class="text-lg font-medium">Elige una empresa y un sitio para ver la completitud.</p>
+  </div>
+
+  <div id="resultado" class="hidden">
+    <!-- Cabecera de resumen -->
+    <div class="card bg-base-100 border border-base-300 shadow-xs mb-6">
+      <div class="card-body gap-3 py-5">
+        <div class="flex items-start justify-between flex-wrap gap-4">
+          <div class="flex flex-col gap-2 min-w-0">
+            <h2 class="text-lg font-bold flex items-center gap-2">
+              <i class="fa-solid fa-location-dot text-primary"></i><span id="r-sitio"></span>
+            </h2>
+            <!-- Pendientes por rol: cuántas acciones (revisar/firmar/elaborar…) faltan por rol. -->
+            <div id="r-pendientes" class="flex flex-wrap items-center gap-1.5"></div>
+          </div>
+          <!-- Leyenda en columnas, a la derecha del título -->
+          <div class="flex flex-wrap gap-x-6 gap-y-3 text-xs text-base-content/50">
+            <div class="flex flex-col gap-1">
+              <span class="font-semibold uppercase tracking-wide text-base-content/35">Origen</span>
+              <span><i class="fa-solid fa-helmet-safety text-warning w-4 text-center"></i> Constructora</span>
+              <span><i class="fa-solid fa-cloud-arrow-up text-info w-4 text-center"></i> Cargado TKR</span>
+            </div>
+            <div class="flex flex-col gap-1 sm:border-l sm:border-base-300 sm:pl-6">
+              <span class="font-semibold uppercase tracking-wide text-base-content/35">Revisión</span>
+              <span><i class="fa-regular fa-circle text-base-content/40 w-4 text-center"></i> por revisar</span>
+              <span><i class="fa-solid fa-circle-check text-success w-4 text-center"></i> revisado</span>
+            </div>
+            <div class="flex flex-col gap-1 sm:border-l sm:border-base-300 sm:pl-6">
+              <span class="font-semibold uppercase tracking-wide text-base-content/35">Firma</span>
+              <span><i class="fa-solid fa-pen-nib text-base-content/40 w-4 text-center"></i> por firmar</span>
+              <span><i class="fa-solid fa-pen-nib text-success w-4 text-center"></i> firmado</span>
+            </div>
+            <div class="sm:border-l sm:border-base-300 sm:pl-6">
+              <span class="font-semibold uppercase tracking-wide text-base-content/35">Roles</span>
+              <div class="grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
+                {% for sigla, lbl, color in roles_leyenda %}
+                <span><span class="badge badge-xs font-semibold align-middle" style="background-color:{{ color }};color:#fff;border-color:{{ color }};">{{ sigla }}</span> = {{ lbl }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acordeón por etapa (las carpetas Imágenes/Videos se enlazan dentro del grupo 05) -->
+    <div id="etapas" class="flex flex-col gap-3"></div>
+
+    <!-- Archivos inesperados -->
+    <details id="inesperados-card" class="card bg-base-100 border border-base-300 shadow-xs mt-6 hidden">
+      <summary class="card-body py-4 cursor-pointer list-none flex items-center gap-2">
+        <i class="fa-solid fa-chevron-right transition-transform"></i>
+        <span class="font-semibold"><i class="fa-solid fa-circle-question text-info"></i> Archivos inesperados (<span id="r-inesp-n">0</span>)</span>
+      </summary>
+      <div class="px-6 pb-5 -mt-2">
+        <p class="text-xs text-base-content/50 mb-2">Archivos en Nextcloud que no corresponden a ningún documento esperado.</p>
+        <div id="inesperados" class="overflow-x-auto"></div>
+      </div>
+    </details>
+  </div>
+
+</div>
+
+<style>
+  #resultado details > summary::-webkit-details-marker { display: none; }
+  #resultado details[open] > summary .fa-chevron-right { transform: rotate(90deg); }
+  #resultado details > summary .fa-chevron-right { transition: transform .15s ease; }
+</style>
+
+<script>
+(function () {
+  const API_SITIOS = "{% url 'docs:api_sitios' %}";
+  const API_SEGUIMIENTO = "{% url 'docs:api_seguimiento' %}";
+  const SUBIR_URL = "{% url 'docs:subir_archivo' %}";
+  const CONFIRMAR_URL = "{% url 'docs:confirmar' %}";
+  const OBSERVAR_URL = "{% url 'docs:observar' %}";
+  const QUITAR_OBS_URL = "{% url 'docs:quitar_observacion' %}";
+  const ENMENDAR_URL = "{% url 'docs:enmendar_observacion' %}";
+  const CURRENT_USER = "{{ request.user.username|escapejs }}";
+  const ARCHIVO_URL = "{% url 'docs:descargar_archivo' %}";
+  const ELIMINAR_URL = "{% url 'docs:eliminar_archivo' %}";
+  const ACEPTAR_ELIM_URL = "{% url 'docs:aceptar_eliminacion' %}";
+  const RECHAZAR_ELIM_URL = "{% url 'docs:rechazar_eliminacion' %}";
+  const ASIGNAR_URL = "{% url 'docs:asignar_archivo' %}";
+  const API_CARPETAS20 = "{% url 'docs:api_carpetas20' %}";
+  const REFRESH_CARPETA_URL = "{% url 'docs:refrescar_carpeta' %}";
+  const ACTUALIZAR_ESTRUCTURA_URL = "{% url 'docs:actualizar_estructura' %}";
+  const PANEL_DOCS_URL = "{% url 'panel:documentos' %}";
+  const TEMPLATE_BASE = API_SEGUIMIENTO.replace('api/seguimiento/', 'template/');
+  const ES_ADMIN = {{ es_admin|yesno:"true,false" }};
+  const ES_COORDINADOR = {{ es_coordinador|yesno:"true,false" }};
+  const ES_TK_REDLINE = {{ es_tk_redline|yesno:"true,false" }};
+  const ES_SUPERUSER = {{ es_superuser|yesno:"true,false" }};
+  // Archivos inesperados: solo superusuario, coordinador y TK Redline.
+  const VER_INESPERADOS = ES_SUPERUSER || ES_COORDINADOR || ES_TK_REDLINE;
+  const NECESARIO_URL = "{% url 'docs:marcar_necesario' %}";
+  // Base del formulario de edición del documento en el Panel (solo superuser).
+  const PANEL_DOC_BASE = "{% url 'panel:documento_editar' 0 %}".replace(/0\/$/, '');
+  let CUR_EMP = '', CUR_SITIO = '';
+  let DATOS = null;
+  const fileInput = document.getElementById('file-input');
+  let _subDoc = null;
+
+  function getCookie(name) {
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? decodeURIComponent(m.pop()) : '';
+  }
+  const CSRF = getCookie('csrftoken');
+
+  const empresaSel = document.getElementById('empresa-select');
+  const sitioSel = document.getElementById('sitio-select');
+  const loadingEl = document.getElementById('loading');
+  const errorEl = document.getElementById('error');
+  const placeholderEl = document.getElementById('placeholder');
+  const resultadoEl = document.getElementById('resultado');
+  const STORAGE_EMPRESA = 'seg_empresa';
+  const STORAGE_SITIO = 'seg_sitio';
+
+  function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+  function showState(which) {
+    loadingEl.classList.add('hidden');
+    errorEl.classList.add('hidden');
+    placeholderEl.classList.add('hidden');
+    resultadoEl.classList.add('hidden');
+    if (which === 'loading') loadingEl.classList.remove('hidden');
+    else if (which === 'error') errorEl.classList.remove('hidden');
+    else if (which === 'placeholder') placeholderEl.classList.remove('hidden');
+    else if (which === 'resultado') resultadoEl.classList.remove('hidden');
+  }
+
+  function renderError(msg) {
+    errorEl.className = 'alert alert-error mb-6';
+    errorEl.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i><span>${escapeHtml(msg)}</span>`;
+  }
+
+  function pct(p, t) { return t > 0 ? Math.round((p / t) * 100) : 0; }
+
+  async function cargarSitios() {
+    const empresa = empresaSel.value;
+    sitioSel.innerHTML = '<option value="">Cargando…</option>';
+    try {
+      const r = await fetch(API_SITIOS + '?empresa=' + encodeURIComponent(empresa));
+      const data = await r.json();
+      const sitios = data.sitios || [];
+      sitioSel.innerHTML = '<option value="">Selecciona un sitio…</option>' +
+        sitios.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+      const saved = localStorage.getItem(STORAGE_SITIO);
+      if (saved && sitios.includes(saved)) { sitioSel.value = saved; cargarSeguimiento(); }
+    } catch (e) {
+      sitioSel.innerHTML = '<option value="">No se pudieron cargar los sitios</option>';
+    }
+  }
+
+  // ── Conteo de archivos por tipo ───────────────────────────────────────────
+  const EXT_BADGE = { pdf: 'badge-pdf', doc: 'badge-word', docx: 'badge-word',
+                      xls: 'badge-excel', xlsx: 'badge-excel',
+                      dwg: 'badge-autocad', dxf: 'badge-autocad', dwf: 'badge-autocad' };
+
+  function extDe(nombre) {
+    const i = nombre.lastIndexOf('.');
+    return i > 0 ? nombre.slice(i + 1).toUpperCase() : 'FILE';
+  }
+
+  function contarPorTipo(archivos) {
+    const m = {};
+    archivos.forEach(a => { const e = extDe(a.nombre); m[e] = (m[e] || 0) + 1; });
+    return Object.entries(m).map(([ext, n]) => ({ ext, n }))
+      .sort((a, b) => b.n - a.n || a.ext.localeCompare(b.ext));
+  }
+
+  // Signo de origen: del constructor (casco) o Cargado TKR (nube).
+  const ORIGEN_ICONO = {
+    constructor: '<i class="fa-solid fa-helmet-safety text-warning" title="Archivo Constructora"></i>',
+    ito: '<i class="fa-solid fa-cloud-arrow-up text-info" title="Cargado TKR"></i>',
+  };
+
+  function origenMarks(archivos) {
+    let s = '';
+    if (archivos.some(x => x.origen === 'constructor')) s += ORIGEN_ICONO.constructor;
+    if (archivos.some(x => x.origen === 'ito')) s += ' ' + ORIGEN_ICONO.ito;
+    return s ? `<span class="mr-1">${s}</span>` : '';
+  }
+
+  function badgesArchivos(d) {
+    const a = d.archivos || [];
+    if (!a.length) return '';
+    const titulo = a.map(x => x.nombre + (x.fecha ? ` (${x.fecha})` : '')).join('\n');
+    const pills = contarPorTipo(a).map(t => {
+      const cls = EXT_BADGE[t.ext.toLowerCase()] || 'badge-ghost';
+      return `<span class="badge badge-xs font-semibold ${cls}">${t.n} ${escapeHtml(t.ext)}</span>`;
+    }).join('');
+    return `<span class="inline-flex flex-wrap items-center gap-1" title="${escapeHtml(titulo)}">${origenMarks(a)}${pills}</span>`;
+  }
+
+  // ── Fila de documento ─────────────────────────────────────────────────────
+  // ELABORAR es la responsabilidad por defecto: con la sigla basta. El resto de
+  // acciones de producción (Presentar) sí se muestran.
+  // Estas acciones no aportan etiqueta visible: basta la sigla del rol.
+  const ACCIONES_SIN_ETIQUETA = ['ELABORAR', 'PRESENTAR'];
+  function etiquetaRol(x) {
+    return ACCIONES_SIN_ETIQUETA.includes(x.accion) ? escapeHtml(x.sigla)
+      : `${escapeHtml(x.sigla)}·${escapeHtml(x.accion)}`;
+  }
+
+  // Texto sensible a la acción de revisión (Revisar / Firmar): sustantivo y verbo.
+  const accNoun = a => a === 'FIRMAR' ? 'firma' : 'revisión';     // "confirmar <noun>"
+  const accPast = a => a === 'FIRMAR' ? 'firmado' : 'revisado';   // "<past> por X"
+  const accYo   = a => a === 'FIRMAR' ? 'firmé' : 'revisé';       // "confirmo que <yo>"
+  // Ícono propio por acción (mismo en pendiente y confirmado); el color marca el estado:
+  //   pendiente → gris apagado · confirmado → verde.
+  //   Revisar → check (fa-circle-check) · Firmar → pluma (fa-pen-nib).
+  const accPendVariant = a => 'btn-ghost text-base-content/40';
+  const accIcon = (a, ok) => a === 'FIRMAR'
+    ? 'fa-solid fa-pen-nib'
+    : (ok ? 'fa-solid fa-circle-check' : 'fa-regular fa-circle');
+
+  // Roles de producción (bajo el nombre): pill plano que se ilumina solo para el
+  // rol que entregó. El constructor: si hay un archivo de su carpeta. Los roles de
+  // supervisión: si auto-confirmaron al subir (cada subida confirma SOLO su rol).
+  function responsablesProduccion(d) {
+    const cargoConstructor = (d.archivos || []).some(a => a.origen === 'constructor');
+    return (d.roles || []).filter(x => x.modo !== 'revision').map(x => {
+      const iluminado = x.es_constructor ? cargoConstructor : x.confirmado;
+      const c = x.color || '#6b7280';
+      // Entregó → color del rol sólido; pendiente → mismo color tenue (translúcido).
+      const style = iluminado
+        ? `background-color:${c};color:#fff;border:1px solid ${c};`
+        : `background-color:${c}1a;color:${c};border:1px solid ${c}40;`;
+      const tip = iluminado
+        ? (x.es_constructor
+            ? `${escapeHtml(x.label)} — Archivo Constructora`
+            : `${escapeHtml(x.label)} — cargado por ${escapeHtml(x.usuario || 'TKR')}${x.fecha ? ' (' + escapeHtml(x.fecha) + ')' : ''}`)
+        : `${escapeHtml(x.label)}: ${escapeHtml(x.accion)}`;
+      return `<span class="badge badge-xs font-semibold whitespace-nowrap" style="${style}" title="${tip}">${etiquetaRol(x)}</span>`;
+    }).join(' ');
+  }
+
+  // Acciones de revisión (al extremo derecho): botón Cupertino (fondo translúcido),
+  // ámbar pendiente / verde confirmado; click → modal.
+  function responsablesRevision(d) {
+    const sinArchivo = !(d.archivos || []).length;
+    return (d.roles || []).filter(x => x.modo === 'revision').map(x => {
+      // Una observación enmendada por su autor ya no marca el botón en ámbar.
+      const observado = !!x.observacion && !x.obs_enmendada;
+      const icon = observado ? 'fa-solid fa-triangle-exclamation' : accIcon(x.accion, x.confirmado);
+      // Sin archivo (y sin confirmar/observar) no hay qué revisar → botón ghost deshabilitado.
+      const deshab = sinArchivo && !x.confirmado && !observado;
+      const variant = observado ? 'btn-warning'
+        : (x.confirmado ? 'btn-success' : (deshab ? 'btn-ghost' : accPendVariant(x.accion)));
+      const tip = deshab
+        ? `${x.label}: ${x.accion} — primero debe cargarse un archivo`
+        : observado
+          ? `${x.label}: OBSERVACIÓN — ${x.observacion} (${x.obs_usuario || '?'}${x.obs_fecha ? ', ' + x.obs_fecha : ''})`
+          : (x.confirmado
+            ? `${x.label}: ${x.accion} — ${accPast(x.accion)} por ${x.usuario || '?'}${x.fecha ? ' (' + x.fecha + ')' : ''}`
+            : `${x.label}: ${x.accion}${ES_ADMIN ? ' — click para revisar' : ''}`);
+      const cls = (ES_ADMIN && !deshab) ? 'js-confirm' : 'pointer-events-none';
+      return `<button type="button" ${deshab ? 'disabled' : ''} class="${cls} btn ${variant} btn-xs gap-1 whitespace-nowrap" data-doc="${d.id}" data-rol="${escapeHtml(x.rol)}" data-label="${escapeHtml(x.label)}" data-accion="${escapeHtml(x.accion)}" data-nombre="${escapeHtml(d.nombre)}" data-confirmado="${x.confirmado ? 1 : 0}" data-observacion="${escapeHtml(x.observacion || '')}" title="${escapeHtml(tip)}"><i class="${icon}"></i>${escapeHtml(x.sigla)}</button>`;
+    }).join(' ');
+  }
+
+  // Botón de alerta (columna central): si hay observaciones, ícono clickeable que despliega
+  // el texto de cada una. Ámbar ⚠ mientras quede alguna pendiente; verde ✓ si todas fueron
+  // enmendadas por su autor.
+  function obsBtn(d) {
+    const obs = d.observaciones || [];
+    if (!obs.length) return '';
+    const resuelto = obs.every(r => r.obs_enmendada);
+    const cls = resuelto ? 'btn-success' : 'btn-warning';
+    const icon = resuelto ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation';
+    const etiqueta = obs.length > 1 ? `${obs.length} observaciones` : 'observación';
+    return `<button type="button" class="js-ver-obs btn ${cls} btn-xs gap-1" data-target="obs-${d.id}" title="Ver ${etiqueta}"><i class="${icon}"></i> ${etiqueta}</button>`;
+  }
+
+  // Panel desplegable (debajo) con el texto de cada observación + quién y cuándo la dejó.
+  // Si la observación está enmendada se muestra en verde con ✓. El AUTOR puede editarla y
+  // marcarla enmendada (o deshacerlo); el SUPERUSUARIO puede borrarla definitivamente.
+  function obsDropdown(d) {
+    const obs = d.observaciones || [];
+    if (!obs.length) return '';
+    const items = obs.map(r => {
+      const enm = !!r.obs_enmendada;
+      const esAutor = !!r.obs_usuario && r.obs_usuario === CURRENT_USER;
+      const wrapCls = enm ? 'bg-success/10 border-success/30' : 'bg-warning/10 border-warning/30';
+      const metaCls = enm ? 'text-success' : 'text-warning';
+      const ico = enm ? '<i class="fa-solid fa-circle-check"></i> ' : '';
+      const meta = `${ico}${escapeHtml(r.label)}${r.obs_usuario ? ' · ' + escapeHtml(r.obs_usuario) : ''}${r.obs_fecha ? ' · ' + escapeHtml(r.obs_fecha) : ''}${enm ? ' · enmendada' : ''}`;
+      const datos = `data-doc="${d.id}" data-rol="${escapeHtml(r.rol)}" data-nombre="${escapeHtml(d.nombre)}"`;
+      // Editar (solo el autor): cambia el texto de su observación.
+      const editar = esAutor
+        ? `<button type="button" class="js-editar-obs btn btn-ghost btn-xs ${metaCls} shrink-0" ${datos} title="Editar observación"><i class="fa-solid fa-pen"></i></button>`
+        : '';
+      // Enmendar/deshacer (solo el autor).
+      const enmendar = esAutor
+        ? (enm
+            ? `<button type="button" class="js-enmendar btn btn-ghost btn-xs gap-1 text-base-content/50 shrink-0" data-doc="${d.id}" data-rol="${escapeHtml(r.rol)}" data-enmendada="0" title="Deshacer (volver a pendiente)"><i class="fa-solid fa-rotate-left"></i> deshacer</button>`
+            : `<button type="button" class="js-enmendar btn btn-success btn-xs gap-1 shrink-0" data-doc="${d.id}" data-rol="${escapeHtml(r.rol)}" data-enmendada="1" title="Marcar como enmendada"><i class="fa-solid fa-check"></i> enmendada</button>`)
+        : '';
+      // Borrar definitivamente (solo superusuario).
+      const borrar = ES_SUPERUSER
+        ? `<button type="button" class="js-borrar-obs btn btn-ghost btn-xs text-error shrink-0" ${datos} title="Borrar definitivamente"><i class="fa-solid fa-trash-can"></i></button>`
+        : '';
+      return `<div class="rounded-lg border px-2 py-1.5 ${wrapCls}">
+        <div class="flex items-center justify-between gap-2">
+          <div class="text-[0.7rem] font-semibold uppercase tracking-wide ${metaCls}">${meta}</div>
+          <div class="flex items-center gap-1 shrink-0">${editar}${enmendar}${borrar}</div>
+        </div>
+        <div class="text-xs text-base-content/80 whitespace-pre-wrap">${escapeHtml(r.observacion)}</div>
+      </div>`;
+    }).join('');
+    return `<div id="obs-${d.id}" class="hidden mt-1 text-left space-y-1 w-full">${items}</div>`;
+  }
+
+  function nombreDoc(d) {
+    const tpl = d.codigo
+      ? ` <a href="${TEMPLATE_BASE}${d.id}/" class="text-primary/70 hover:text-primary" title="Descargar template: ${escapeHtml(d.codigo)}"><i class="fa-solid fa-download text-xs"></i></a>`
+      : '';
+    // Para admins el título es clickeable → abre el modal de carga (reusa la clase .js-subir).
+    const cls = ES_ADMIN ? 'font-medium js-subir cursor-pointer hover:text-primary transition-colors' : 'font-medium';
+    const datos = ES_ADMIN ? `data-doc="${d.id}" data-nombre="${escapeHtml(d.nombre)}"` : '';
+    const tip = ES_ADMIN ? 'Cargar archivo' : (d.codigo || '');
+    return `<span class="${cls}" ${datos} ${tip ? `title="${escapeHtml(tip)}"` : ''}>${escapeHtml(d.nombre)}</span>${tpl}`;
+  }
+
+  // Botón "ver" (en la misma fila que los badges de tipo).
+  function verBtn(d) {
+    if (!(d.archivos || []).length) return '';
+    return `<button type="button" class="js-ver btn btn-view btn-xs gap-1" data-target="files-${d.id}"><i class="fa-solid fa-eye"></i> ver</button>`;
+  }
+
+  // Lista desplegable de archivos (debajo), con descarga y borrado en dos pasos.
+  function verDropdown(d) {
+    const a = d.archivos || [];
+    if (!a.length) return '';
+    const links = a.map(x => {
+      const datos = `data-path="${escapeHtml(x.path)}" data-nombre="${escapeHtml(x.nombre)}"`;
+      let acc = '';
+      if (x.pendiente_eliminar) {
+        // Marcado para borrado: el Coordinador/superusuario acepta (✓) o rechaza (↩).
+        acc = ES_COORDINADOR
+          ? `<button type="button" class="js-elim-ok text-success hover:opacity-70 shrink-0" ${datos} title="Aceptar borrado (elimina de Nextcloud)"><i class="fa-solid fa-check"></i></button>
+             <button type="button" class="js-elim-no text-base-content/50 hover:opacity-70 shrink-0" ${datos} title="Rechazar borrado (conservar)"><i class="fa-solid fa-rotate-left"></i></button>`
+          : `<span class="text-warning shrink-0" title="Pendiente de borrado — espera al Coordinador"><i class="fa-solid fa-xmark"></i></span>`;
+      } else if (ES_ADMIN) {
+        acc = `<button type="button" class="js-del text-delete hover:opacity-70 shrink-0" ${datos} title="Marcar para borrado"><i class="fa-solid fa-trash-can text-xs"></i></button>`;
+      }
+      const nameCls = x.pendiente_eliminar ? 'line-through text-base-content/40' : 'link link-info';
+      const tipArchivo = `${escapeHtml(x.path)}\n${x.origen === 'constructor' ? 'Archivo Constructora' : 'Cargado TKR'}`;
+      return `<div class="flex items-center gap-2">
+        <a href="${ARCHIVO_URL}?path=${encodeURIComponent(x.path)}" target="_blank" class="text-xs ${nameCls} whitespace-nowrap" title="${tipArchivo}">${ORIGEN_ICONO[x.origen] || ''} ${escapeHtml(x.nombre)}</a>
+        ${acc}
+      </div>`;
+    }).join('');
+    return `<div id="files-${d.id}" class="hidden mt-1 text-left space-y-0.5 w-full">${links}</div>`;
+  }
+
+  function filaDoc(d) {
+    const dot = d.estado === 'presente'
+      ? '<i class="fa-solid fa-circle text-success" style="font-size:.55rem"></i>'
+      : '<i class="fa-regular fa-circle text-base-content/30" style="font-size:.55rem"></i>';
+    const necesario = d.necesario !== false;
+    const subir = ES_ADMIN
+      ? `<button type="button" class="js-subir btn btn-xs border-none bg-base-300 hover:bg-base-content/20 text-base-content/80" data-doc="${d.id}" data-nombre="${escapeHtml(d.nombre)}" title="Cargar archivo"><i class="fa-solid fa-upload"></i></button>`
+      : '';
+    // Botón editar (solo superuser): abre el formulario del documento en un modal.
+    const editar = ES_SUPERUSER
+      ? `<button type="button" class="js-editar btn btn-edit btn-xs" data-doc="${d.id}" title="Editar documento"><i class="fa-solid fa-pen"></i></button>`
+      : '';
+    // Toggle "necesario" (solo superuser): off = el documento no es necesario.
+    const toggleNec = ES_SUPERUSER
+      ? `<input type="checkbox" class="js-necesario toggle toggle-xs toggle-success" data-doc="${d.id}" ${necesario ? 'checked' : ''} title="${necesario ? 'Necesario (apaga si no aplica)' : 'No necesario'}">`
+      : '';
+    // Observación general de TK Redline: puede observar cualquier documento (a la izquierda
+    // del toggle "Necesario").
+    const obsTkr = ES_TK_REDLINE
+      ? `<button type="button" class="js-obs-tkr btn btn-xs border-none bg-base-300 hover:bg-warning/20 text-warning" data-doc="${d.id}" data-nombre="${escapeHtml(d.nombre)}" title="Observación TK Redline"><i class="fa-solid fa-triangle-exclamation"></i></button>`
+      : '';
+    // Grid de columnas fijas (mismo en todas las filas → alineado):
+    // dot | nombre(fijo) | espacio | archivos(central) | espacio | revisar | toggle+subir.
+    // La columna de revisión es fija (8.5rem, cabe 2 botones) + flex-nowrap: Revisar/Firmar
+    // van siempre en una sola fila y el ancho no varía entre filas (no desplaza el centro).
+    return `<div class="grid items-center gap-2 py-2 px-3 rounded-lg hover:bg-base-200/60 transition-colors ${necesario ? '' : 'opacity-45'}"
+                 style="grid-template-columns: .9rem 20rem 1fr auto 1fr 8.5rem auto;">
+      <span class="text-center">${dot}</span>
+      <div class="min-w-0">
+        <div class="truncate">${nombreDoc(d)}</div>
+        <div class="mt-0.5 flex flex-wrap gap-1">${responsablesProduccion(d)}</div>
+      </div>
+      <div></div>
+      <div class="flex flex-col items-center gap-0.5 min-w-0">
+        <div class="flex items-center gap-2">${badgesArchivos(d)}${verBtn(d)}${obsBtn(d)}</div>
+        ${verDropdown(d)}
+        ${obsDropdown(d)}
+      </div>
+      <div></div>
+      <div class="flex flex-nowrap gap-1 justify-end">${responsablesRevision(d)}</div>
+      <div class="flex items-center justify-end gap-2">${obsTkr}${toggleNec}${editar}${subir}</div>
+    </div>`;
+  }
+
+  // ── Sección (acordeón) por etapa ──────────────────────────────────────────
+  // Encabezado de bloque (carpeta o "sin carpeta") con su conteo de presentes.
+  // Cuenta solo documentos necesarios (los apagados no entran en la completitud).
+  function cuenta(docs) {
+    const nec = docs.filter(d => d.necesario !== false);
+    return { total: nec.length, pres: nec.filter(d => d.estado === 'presente').length };
+  }
+
+  function encabezadoBloque(icono, titulo, docs) {
+    const { total, pres } = cuenta(docs);
+    return `<div class="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-base-content/55">
+      <i class="${icono}"></i> ${escapeHtml(titulo)}
+      <span class="normal-case font-normal text-base-content/35">· ${pres}/${total}</span>
+    </div>`;
+  }
+
+  function grupoEtapa(etapaDisplay, docs) {
+    const { total, pres } = cuenta(docs);
+    const porc = pct(pres, total);
+    const sueltos = docs.filter(d => !d.carpeta);
+    const carpetas = {};
+    docs.filter(d => d.carpeta).forEach(d => { (carpetas[d.carpeta] = carpetas[d.carpeta] || []).push(d); });
+    // Documentos sin carpeta: van directo, sin rótulo.
+    let cuerpo = sueltos.map(filaDoc).join('');
+    // Cada carpeta: encabezado + filas enmarcadas. Orden = el campo `orden` del modelo
+    // (mínimo de sus documentos), no alfabético.
+    const ordenCarpeta = c => Math.min(...carpetas[c].map(d => d.orden ?? 9999));
+    Object.keys(carpetas).sort((a, b) => ordenCarpeta(a) - ordenCarpeta(b)).forEach(c => {
+      cuerpo += `<div class="mt-2">
+        ${encabezadoBloque('fa-solid fa-folder text-warning/70', c, carpetas[c])}
+        <div class="ml-3 pl-2 border-l-2 border-base-300">${carpetas[c].map(filaDoc).join('')}</div>
+      </div>`;
+    });
+    const barCls = porc === 100 ? 'progress-success' : (porc > 0 ? 'progress-warning' : '');
+    return `<details class="card bg-base-100 border border-base-300 shadow-xs" data-etapa="${escapeHtml((docs[0] || {}).etapa || '')}" ${pres > 0 ? 'open' : ''}>
+      <summary class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none select-none">
+        <i class="fa-solid fa-chevron-right text-base-content/40 text-sm"></i>
+        <span class="font-bold flex-1 min-w-0 truncate">${escapeHtml(etapaDisplay)}</span>
+        <span class="text-sm font-semibold tabular-nums ${porc === 100 ? 'text-success' : 'text-base-content/60'}">${pres}/${total}</span>
+        <progress class="progress ${barCls} w-24 h-2 shrink-0" value="${porc}" max="100"></progress>
+      </summary>
+      <div class="px-2 pb-3 border-t border-base-200">${cuerpo}</div>
+    </details>`;
+  }
+
+  const esPdf = (nombre) => /\.pdf$/i.test(nombre || '');
+
+  function tablaInesperados(items) {
+    if (!items.length) return '';
+    const rows = items.map((x, i) => {
+      const check = ES_ADMIN
+        ? `<td class="w-6"><input type="checkbox" class="js-inesp-check checkbox checkbox-xs" data-i="${i}"></td>`
+        : '';
+      const ver = esPdf(x.nombre)
+        ? `<a href="${ARCHIVO_URL}?path=${encodeURIComponent(x.path)}" target="_blank" rel="noopener" class="btn btn-ghost btn-xs gap-1" title="Ver PDF"><i class="fa-solid fa-eye"></i> Ver</a>`
+        : '';
+      const asignar = ES_ADMIN
+        ? `<button type="button" class="js-asignar btn btn-info btn-xs" data-i="${i}">Asignar a…</button>`
+        : '';
+      return `<tr>
+        ${check}
+        <td class="text-base-content/60 whitespace-nowrap" title="${escapeHtml(x.path)}">${escapeHtml(x.carpeta)}</td>
+        <td class="font-medium" title="${escapeHtml(x.path)}">${escapeHtml(x.nombre)}</td>
+        <td class="text-base-content/60 whitespace-nowrap">${escapeHtml(x.fecha || '')}</td>
+        <td class="text-right whitespace-nowrap">${ver} ${asignar}</td>
+      </tr>`;
+    }).join('');
+    const thCheck = ES_ADMIN ? '<th class="w-6"><input type="checkbox" id="inesp-check-all" class="checkbox checkbox-xs"></th>' : '';
+    const toolbar = ES_ADMIN
+      ? `<div class="flex items-center gap-2 mb-2">
+           <button type="button" id="inesp-asignar-sel" class="btn btn-info btn-xs" disabled>Asignar seleccionados a…</button>
+           <span id="inesp-sel-count" class="text-xs text-base-content/50"></span>
+         </div>`
+      : '';
+    return `${toolbar}<table class="table table-sm"><thead><tr>${thCheck}<th>Carpeta</th><th>Archivo</th><th>Fecha</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  // Chip de la plantilla en uso + habilitar el botón "Actualizar estructura" (solo superuser).
+  function actualizarControlEstructura(data) {
+    if (!ES_SUPERUSER) return;
+    const ctrl = document.getElementById('estructura-control');
+    const chip = document.getElementById('estructura-chip');
+    const btn = document.getElementById('actualizar-estructura-btn');
+    const link = document.getElementById('editar-documentos-link');
+    if (!ctrl) return;
+    const p = data && data.plantilla;
+    if (p) {
+      ctrl.classList.remove('hidden');
+      chip.textContent = p.nombre + (p.es_propia ? '' : ' · compartida');
+      chip.className = 'badge badge-sm whitespace-nowrap ' + (p.es_propia ? 'badge-info badge-outline' : 'badge-ghost');
+      chip.title = p.es_propia ? 'Plantilla propia del sitio' : 'Plantilla compartida / por defecto';
+      btn.disabled = false;
+      if (link) link.href = PANEL_DOCS_URL + '?plantilla=' + encodeURIComponent(p.id);
+    } else {
+      chip.textContent = '';
+      btn.disabled = true;
+      if (link) link.href = PANEL_DOCS_URL;
+    }
+  }
+
+  // ── Pendientes por rol (debajo del título) ─────────────────────────────────
+  // Por cada rol, cuántos documentos NECESARIOS tiene asignados y cuántos ya cumplió:
+  //  · Revisión (REVISAR/FIRMAR) → es individual: cuenta como hecho solo si ese rol confirmó.
+  //  · Producción/constructora (subir el documento) → la obligación es "que el documento esté".
+  //    Si el documento YA está presente (lo subió cualquiera de los responsables), cuenta como
+  //    hecho para TODOS los roles de producción (ej. si el constructor subió los planos OOEE,
+  //    el eléctrico ya no figura pendiente).
+  const ROL_ORDEN = ['BUS', 'TKR', 'CON', 'ITO', 'HSE', 'ELE', 'COO'];
+  function renderPendientes(data) {
+    const cont = document.getElementById('r-pendientes');
+    const map = {};
+    (data.documentos || []).filter(d => d.necesario !== false).forEach(d => {
+      const presente = d.estado === 'presente';
+      (d.roles || []).forEach(x => {
+        const m = map[x.rol] || (map[x.rol] = { sigla: x.sigla, label: x.label, color: x.color || '#6b7280', total: 0, done: 0 });
+        m.total += 1;
+        const hecho = x.modo === 'revision' ? x.confirmado : (presente || x.confirmado);
+        if (hecho) m.done += 1;
+      });
+    });
+    const roles = Object.values(map).sort((a, b) => ROL_ORDEN.indexOf(a.sigla) - ROL_ORDEN.indexOf(b.sigla));
+    if (!roles.length) { cont.innerHTML = ''; return; }
+    cont.innerHTML = '<span class="text-xs font-semibold uppercase tracking-wide text-base-content/40 mr-0.5">Pendientes</span>' +
+      roles.map(m => {
+        const pend = m.total - m.done;
+        const c = m.color;
+        const tip = `${m.label}: ${m.done} de ${m.total} hechos` + (pend ? ` · ${pend} pendiente${pend > 1 ? 's' : ''}` : ' · completo');
+        if (pend === 0) {
+          return `<span class="badge badge-sm gap-1 whitespace-nowrap" style="background-color:${c}1a;color:${c};border:1px solid ${c}40;" title="${escapeHtml(tip)}"><span class="font-bold">${escapeHtml(m.sigla)}</span><i class="fa-solid fa-check"></i></span>`;
+        }
+        return `<span class="badge badge-sm gap-1 whitespace-nowrap" style="background-color:${c};color:#fff;border:1px solid ${c};" title="${escapeHtml(tip)}"><span class="font-bold">${escapeHtml(m.sigla)}</span> -${pend}</span>`;
+      }).join('');
+  }
+
+  function render(data) {
+    DATOS = data;
+    document.getElementById('r-sitio').textContent = data.sitio;
+    renderPendientes(data);
+    actualizarControlEstructura(data);
+
+    // Acordeón por etapa (ordenado por código de etapa 00..07). Las imágenes/videos aparecen
+    // bajo su documento (p. ej. "Registro fotográfico"), no como sección aparte.
+    // Los documentos marcados "no necesario" solo los ve el superusuario (que puede reactivarlos);
+    // para el resto, no se muestran.
+    const docs = (data.documentos || []).filter(d => ES_SUPERUSER || d.necesario !== false);
+    const ag = data.agregados || {};
+    const etapas = [...new Set(docs.map(d => d.etapa))].sort();
+    document.getElementById('etapas').innerHTML = etapas.map(k => {
+      const ds = docs.filter(d => d.etapa === k);
+      const disp = (ag[k] || {}).etapa_display || (ds[0] && ds[0].etapa_display) || k;
+      return grupoEtapa(disp, ds);
+    }).join('');
+
+    // Inesperados: solo visibles para superusuario, coordinador y TK Redline.
+    const inesp = data.inesperados || [];
+    const card = document.getElementById('inesperados-card');
+    document.getElementById('r-inesp-n').textContent = inesp.length;
+    if (VER_INESPERADOS && inesp.length) {
+      document.getElementById('inesperados').innerHTML = tablaInesperados(inesp);
+      card.classList.remove('hidden');
+    } else {
+      card.classList.add('hidden');
+    }
+    // Imágenes/Videos ya no son tarjetas: se enlazan dentro del grupo 05_SEGUIMIENTO (ver render arriba).
+  }
+
+  async function cargarSeguimiento(forzar) {
+    const sitio = sitioSel.value;
+    localStorage.setItem(STORAGE_SITIO, sitio);
+    const rb = document.getElementById('refresh-carpeta-btn');
+    if (rb) rb.disabled = !sitio;
+    const eb = document.getElementById('actualizar-estructura-btn');
+    if (eb) eb.disabled = !sitio;
+    if (!sitio) { showState('placeholder'); return; }
+    CUR_EMP = empresaSel.value; CUR_SITIO = sitio;
+    showState('loading');
+    try {
+      const r = await fetch(API_SEGUIMIENTO + '?empresa=' + encodeURIComponent(CUR_EMP) + '&sitio=' + encodeURIComponent(sitio) + (forzar === true ? '&refresh=1' : ''));
+      const data = await r.json();
+      if (!r.ok || data.error) { renderError(data.error || 'Error del servidor'); showState('error'); return; }
+      render(data);
+      showState('resultado');
+    } catch (e) {
+      renderError(e.message || 'Error de conexión');
+      showState('error');
+    }
+  }
+
+  // Refresco AJAX en sitio, SIN spinner: re-fetch + re-render preservando los acordeones
+  // abiertos y la posición de scroll. Se usa tras editar un documento (cambio de BD, no de
+  // Nextcloud): la vista se actualiza en el lugar, sin “saltar”. Si falla, deja la vista intacta.
+  // Re-render conservando los acordeones abiertos y el scroll (para updates en el lugar).
+  function renderPreservando(data) {
+    const abiertas = new Set(
+      [...document.querySelectorAll('#etapas > details[open]')].map(d => d.dataset.etapa));
+    const sy = window.scrollY;
+    render(data);
+    document.querySelectorAll('#etapas > details').forEach(d => {
+      if (d.dataset.etapa) d.open = abiertas.has(d.dataset.etapa);
+    });
+    window.scrollTo(0, sy);
+  }
+
+  async function silentReload() {
+    if (!CUR_SITIO) return;
+    try {
+      const r = await fetch(API_SEGUIMIENTO + '?empresa=' + encodeURIComponent(CUR_EMP) + '&sitio=' + encodeURIComponent(CUR_SITIO));
+      const data = await r.json();
+      if (!r.ok || data.error) return;
+      renderPreservando(data);
+    } catch (e) { /* silencioso: conserva la vista actual */ }
+  }
+
+  // ── Acciones de admin (confirmar / subir / ver) ───────────────────────────
+  let _confEl = null;
+  const modalConf = document.getElementById('modal-confirm');
+
+  const obsWrap = document.getElementById('modal-confirm-obs');
+  const obsTextEl = document.getElementById('modal-confirm-obs-text');
+  const btnNoConforme = document.getElementById('modal-confirm-noconforme');
+  const btnConforme = document.getElementById('modal-confirm-ok');
+
+  function abrirModalConfirm(el) {
+    _confEl = el;
+    const yes = el.dataset.confirmado === '1';
+    const obs = el.dataset.observacion || '';
+    obsTextEl.value = obs;
+    obsWrap.classList.add('hidden');
+    if (yes) {
+      // Ya conforme → solo opción de quitar la conformidad.
+      document.getElementById('modal-confirm-title').textContent = 'Quitar conformidad';
+      document.getElementById('modal-confirm-text').textContent =
+        `¿Quitar la conformidad de “${el.dataset.label}” en ${el.dataset.nombre}?`;
+      btnNoConforme.classList.add('hidden');
+      btnConforme.textContent = 'Quitar';
+    } else {
+      document.getElementById('modal-confirm-title').textContent = `Revisar: ${el.dataset.nombre}`;
+      document.getElementById('modal-confirm-text').textContent =
+        `Como ${el.dataset.label}: ¿conforme con el documento, o tiene una observación (deja una nota para corregir)?`;
+      btnNoConforme.classList.remove('hidden');
+      btnConforme.textContent = 'Conforme';
+      if (obs) obsWrap.classList.remove('hidden');  // ya tenía observación → mostrarla
+    }
+    modalConf.showModal();
+  }
+
+  async function _postRevision(url, body, errMsg) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok) { window.Alert && window.Alert.error(data.error || errMsg); return false; }
+    await silentReload();
+    return true;
+  }
+
+  // "Conforme" (o "Quitar" si ya estaba conforme): alterna la confirmación.
+  btnConforme.addEventListener('click', async () => {
+    if (!_confEl) return;
+    modalConf.close();
+    await _postRevision(CONFIRMAR_URL,
+      { empresa: CUR_EMP, sitio: CUR_SITIO, doc_id: _confEl.dataset.doc, rol: _confEl.dataset.rol },
+      'No se pudo confirmar');
+    _confEl = null;
+  });
+
+  // "Observación": 1er click revela la nota; 2º click (con texto) la envía.
+  btnNoConforme.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!_confEl) return;
+    if (obsWrap.classList.contains('hidden')) { obsWrap.classList.remove('hidden'); obsTextEl.focus(); return; }
+    const texto = obsTextEl.value.trim();
+    if (!texto) { obsTextEl.focus(); return; }
+    modalConf.close();
+    await _postRevision(OBSERVAR_URL,
+      { empresa: CUR_EMP, sitio: CUR_SITIO, doc_id: _confEl.dataset.doc, rol: _confEl.dataset.rol, texto },
+      'No se pudo guardar la observación');
+    _confEl = null;
+  });
+
+  // Marcar/desmarcar una observación como enmendada (solo el autor; el backend lo valida).
+  async function enmendarObs(docId, rol, enmendada) {
+    await _postRevision(ENMENDAR_URL,
+      { empresa: CUR_EMP, sitio: CUR_SITIO, doc_id: docId, rol, enmendada },
+      'No se pudo actualizar la observación');
+  }
+
+  // ── Modal de observación: crear/editar la observación de un rol sobre un documento ──
+  // TK Redline lo usa para observar cualquier documento (rol 'rol_tk_redline'); el autor de
+  // cualquier observación lo usa para editar su texto (pasando su rol).
+  const modalObs = document.getElementById('modal-obs');
+  const obsTkrText = document.getElementById('modal-obs-text');
+  let _obsDoc = null, _obsRol = 'rol_tk_redline';
+
+  function abrirModalObs(docId, nombre, rol) {
+    _obsDoc = docId;
+    _obsRol = rol || 'rol_tk_redline';
+    const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(docId));
+    const prev = doc && (doc.observaciones || []).find(o => o.rol === _obsRol);
+    obsTkrText.value = prev ? prev.observacion : '';
+    document.getElementById('modal-obs-title').textContent = _obsRol === 'rol_tk_redline'
+      ? 'Observación TK Redline'
+      : `Editar observación${prev ? ' · ' + prev.label : ''}`;
+    document.getElementById('modal-obs-doc').textContent = nombre || '';
+    modalObs.showModal();
+    obsTkrText.focus();
+  }
+
+  document.getElementById('modal-obs-ok').addEventListener('click', async () => {
+    if (_obsDoc == null) return;
+    const texto = obsTkrText.value.trim();
+    if (!texto) { obsTkrText.focus(); return; }
+    modalObs.close();
+    await _postRevision(OBSERVAR_URL,
+      { empresa: CUR_EMP, sitio: CUR_SITIO, doc_id: _obsDoc, rol: _obsRol, texto },
+      'No se pudo guardar la observación');
+    _obsDoc = null;
+  });
+
+  // Borrado definitivo de una observación (solo superusuario; el backend lo valida).
+  async function borrarObs(docId, rol) {
+    if (!confirm('¿Borrar definitivamente esta observación?')) return;
+    await _postRevision(QUITAR_OBS_URL,
+      { empresa: CUR_EMP, sitio: CUR_SITIO, doc_id: docId, rol },
+      'No se pudo borrar la observación');
+  }
+
+  // ── Modal de subida con drag & drop (varios archivos) ─────────────────────
+  const modalSubir = document.getElementById('modal-subir');
+  const dropzone = document.getElementById('dropzone');
+  const subFileCont = document.getElementById('subir-file');
+  let _subFiles = [];        // [{file, nombre}]
+  let _subDocCodigo = '';
+
+  const _pad2 = n => String(n).padStart(2, '0');
+  function hoyISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${_pad2(d.getMonth() + 1)}-${_pad2(d.getDate())}`;
+  }
+  // Fecha elegida en formato ddmmaa (para el nombre sugerido). '' si no hay fecha.
+  function fechaDDMMAA() {
+    const v = (document.getElementById('subir-fecha').value || '').split('-'); // [yyyy,mm,dd]
+    return v.length === 3 ? v[2] + v[1] + v[0].slice(2) : '';
+  }
+
+  function abrirModalSubir(docId, docNombre) {
+    _subDoc = docId; _subFiles = [];
+    const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(docId));
+    _subDocCodigo = doc ? (doc.codigo || '') : '';
+    // El calendario solo aplica a documentos con secuencia '(XX00)' (ej. Informe de visita).
+    const usaFecha = _subDocCodigo.includes('(XX00)');
+    const row = document.getElementById('subir-fecha-row');
+    row.classList.toggle('hidden', !usaFecha);
+    row.classList.toggle('flex', usaFecha);
+    if (usaFecha) document.getElementById('subir-fecha').value = hoyISO();
+    renderSubFiles();
+    document.getElementById('subir-doc').textContent = docNombre || '';
+    modalSubir.showModal();
+  }
+
+  function agregarArchivos(fileList) {
+    Array.from(fileList).forEach(f => {
+      if (!_subFiles.some(x => x.file.name === f.name && x.file.size === f.size))
+        _subFiles.push({ file: f, nombre: f.name });
+    });
+    renderSubFiles();
+  }
+
+  function nombreSugerido(file, i) {
+    if (!_subDocCodigo) return file.name;
+    const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : '';
+    const m = (CUR_SITIO || '').match(/CL-[A-Za-z]{2}-\d+/);
+    let base = m ? _subDocCodigo.split('CL-XX-0000').join(m[0]) : _subDocCodigo;
+    // Placeholder de secuencia '(XX00)' → correlativo + fecha: '(1-ddmmaa)', '(2-ddmmaa)'…
+    // El número sigue a los archivos ya cargados del documento + la posición en el lote.
+    if (base.includes('(XX00)')) {
+      const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(_subDoc));
+      const existentes = doc ? (doc.archivos || []).length : 0;
+      const num = existentes + (i || 0) + 1;
+      const fecha = fechaDDMMAA();
+      base = base.split('(XX00)').join('(' + num + (fecha ? '-' + fecha : '') + ')');
+    }
+    return base + ext;
+  }
+
+  function renderSubFiles() {
+    subFileCont.innerHTML = _subFiles.map((f, i) => `
+      <div class="flex items-center gap-1 w-full">
+        <input type="text" class="js-nombre input input-bordered input-xs flex-1 min-w-0" data-i="${i}" value="${escapeHtml(f.nombre)}">
+        ${_subDocCodigo ? `<button type="button" class="js-sugerir btn btn-ghost btn-xs" data-i="${i}" title="Usar nombre sugerido"><i class="fa-solid fa-wand-magic-sparkles"></i></button>` : ''}
+        <button type="button" class="js-quita btn btn-ghost btn-xs" data-i="${i}" title="Quitar"><i class="fa-solid fa-xmark"></i></button>
+      </div>`).join('');
+    document.getElementById('subir-ok').disabled = !_subFiles.length;
+  }
+
+  subFileCont.addEventListener('click', (e) => {
+    const q = e.target.closest('.js-quita');
+    if (q) { _subFiles.splice(+q.dataset.i, 1); renderSubFiles(); return; }
+    const s = e.target.closest('.js-sugerir');
+    if (s) { const i = +s.dataset.i; _subFiles[i].nombre = nombreSugerido(_subFiles[i].file, i); renderSubFiles(); }
+  });
+  subFileCont.addEventListener('input', (e) => {
+    const inp = e.target.closest('.js-nombre');
+    if (inp) _subFiles[+inp.dataset.i].nombre = inp.value;
+  });
+  // Al cambiar la fecha, re-aplica el nombre sugerido (con la nueva fecha) a los archivos.
+  document.getElementById('subir-fecha').addEventListener('change', () => {
+    if (!_subFiles.length) return;
+    _subFiles.forEach((f, i) => { f.nombre = nombreSugerido(f.file, i); });
+    renderSubFiles();
+  });
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('border-info', 'bg-base-200'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('border-info', 'bg-base-200'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('border-info', 'bg-base-200');
+    if (e.dataTransfer.files.length) agregarArchivos(e.dataTransfer.files);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) agregarArchivos(fileInput.files);
+    fileInput.value = '';
+  });
+
+  const subirOk = document.getElementById('subir-ok');
+  subirOk.addEventListener('click', async () => {
+    if (!_subFiles.length || _subDoc == null) return;
+    const docId = _subDoc;
+    const fd = new FormData();
+    fd.append('empresa', CUR_EMP); fd.append('sitio', CUR_SITIO); fd.append('doc_id', docId);
+    _subFiles.forEach(f => { fd.append('file', f.file); fd.append('nombre', f.nombre); });
+    subirOk.disabled = true;
+    subirOk.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Cargando…';
+    try {
+      const r = await fetch(SUBIR_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: fd });
+      const data = await r.json();
+      if (!r.ok) { window.Alert && window.Alert.error(data.error || 'No se pudo cargar'); return; }
+      modalSubir.close();
+      window.Alert && window.Alert.success(`${data.subidos || _subFiles.length} archivo(s) cargado(s)`, { autoHide: 5000 });
+      // AJAX: agrego los archivos en memoria y re-renderizo (sin reconsultar Nextcloud).
+      const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(docId));
+      if (doc) {
+        const existentes = new Set((doc.archivos || []).map(a => a.path));
+        const nuevos = (data.archivos || [])
+          .filter(a => !existentes.has(a.path))
+          .map(a => ({ nombre: a.nombre, fecha: '', path: a.path, origen: 'ito' }));
+        doc.archivos = (doc.archivos || []).concat(nuevos);
+        // Estado de roles tras subir: el backend reinicia las revisiones y auto-confirma
+        // el rol del que sube. Usamos el estado que devuelve; si no vino, reinicio local.
+        if (data.roles) {
+          doc.roles = data.roles;
+        } else {
+          (doc.roles || []).forEach(r => {
+            if (r.modo === 'revision') { r.confirmado = false; r.usuario = ''; r.fecha = ''; r.observacion = ''; r.obs_enmendada = false; }
+          });
+        }
+        // Subir limpia TODAS las observaciones del documento (backend: subir_documento).
+        doc.observaciones = [];
+        doc.tiene_warning = false;
+        if (doc.archivos.length && doc.estado === 'falta') {
+          doc.estado = 'presente';
+          const ag = (DATOS.agregados || {})[doc.etapa];
+          if (ag) ag.presentes += 1;
+          DATOS.presentes = (DATOS.presentes || 0) + 1;
+        }
+        render(DATOS);
+      }
+      _subFiles = []; _subDoc = null;
+    } catch (e) {
+      window.Alert && window.Alert.error(e.message || 'Error al cargar');
+    } finally {
+      subirOk.disabled = false;
+      subirOk.textContent = 'Cargar';
+    }
+  });
+
+  document.getElementById('etapas').addEventListener('click', (ev) => {
+    const conf = ev.target.closest('.js-confirm');
+    if (conf) { abrirModalConfirm(conf); return; }
+    const subir = ev.target.closest('.js-subir');
+    if (subir) { abrirModalSubir(subir.dataset.doc, subir.dataset.nombre); return; }
+    const ver = ev.target.closest('.js-ver');
+    if (ver) { document.getElementById(ver.dataset.target).classList.toggle('hidden'); return; }
+    const verObs = ev.target.closest('.js-ver-obs');
+    if (verObs) { document.getElementById(verObs.dataset.target).classList.toggle('hidden'); return; }
+    const enm = ev.target.closest('.js-enmendar');
+    if (enm) { enmendarObs(enm.dataset.doc, enm.dataset.rol, enm.dataset.enmendada === '1'); return; }
+    const obsTkr = ev.target.closest('.js-obs-tkr');
+    if (obsTkr) { abrirModalObs(obsTkr.dataset.doc, obsTkr.dataset.nombre); return; }
+    const editObs = ev.target.closest('.js-editar-obs');
+    if (editObs) { abrirModalObs(editObs.dataset.doc, editObs.dataset.nombre, editObs.dataset.rol); return; }
+    const borrarObsEl = ev.target.closest('.js-borrar-obs');
+    if (borrarObsEl) { borrarObs(borrarObsEl.dataset.doc, borrarObsEl.dataset.rol); return; }
+    const del = ev.target.closest('.js-del');
+    if (del) { marcarEliminacion(del.dataset.path, del.dataset.nombre); return; }
+    const elimOk = ev.target.closest('.js-elim-ok');
+    if (elimOk) { aceptarEliminacion(elimOk.dataset.path, elimOk.dataset.nombre); return; }
+    const elimNo = ev.target.closest('.js-elim-no');
+    if (elimNo) { rechazarEliminacion(elimNo.dataset.path); return; }
+    const editar = ev.target.closest('.js-editar');
+    if (editar) { abrirModalEditar(editar.dataset.doc); return; }
+  });
+
+  // ── Editar documento en modal (solo superuser) ────────────────────────────
+  const modalEditar = document.getElementById('modal-editar');
+  const editarForm = document.getElementById('editar-form');
+  const editarOk = document.getElementById('editar-ok');
+  let _editUrl = null;
+
+  async function abrirModalEditar(docId) {
+    _editUrl = `${PANEL_DOC_BASE}${docId}/`;
+    editarForm.innerHTML = '<div class="py-8 text-center"><span class="loading loading-spinner loading-lg text-primary"></span></div>';
+    modalEditar.showModal();
+    try {
+      const r = await fetch(_editUrl + '?partial=1', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const data = await r.json();
+      editarForm.innerHTML = data.html || '<p class="text-error">No se pudo cargar el formulario.</p>';
+    } catch (e) {
+      editarForm.innerHTML = '<p class="text-error">No se pudo cargar el formulario.</p>';
+    }
+  }
+
+  editarOk.addEventListener('click', async () => {
+    if (!_editUrl) return;
+    editarOk.disabled = true;
+    editarOk.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Guardando…';
+    try {
+      const fd = new FormData(editarForm);
+      const r = await fetch(_editUrl, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': CSRF },
+        body: fd,
+      });
+      const data = await r.json();
+      if (data.ok) {
+        modalEditar.close();
+        window.Alert && window.Alert.success('Documento actualizado', { autoHide: 4000 });
+        // Solo AJAX: refresco en el lugar (sin spinner, conservando acordeones/scroll). El
+        // fast-path reconstruye desde los archivos cacheados sin re-escanear Nextcloud.
+        silentReload();
+      } else {
+        // Re-inyecta el formulario con los errores de validación.
+        editarForm.innerHTML = data.html || '<p class="text-error">No se pudo guardar.</p>';
+      }
+    } catch (e) {
+      window.Alert && window.Alert.error('No se pudo guardar');
+    } finally {
+      editarOk.disabled = false;
+      editarOk.textContent = 'Guardar';
+    }
+  });
+
+  // Toggle "necesario" (solo superuser).
+  document.getElementById('etapas').addEventListener('change', async (ev) => {
+    const t = ev.target.closest('.js-necesario');
+    if (!t) return;
+    const docId = t.dataset.doc, necesario = t.checked;
+    const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(docId));
+    if (doc) { doc.necesario = necesario; render(DATOS); }
+    try {
+      const r = await fetch(NECESARIO_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify({ empresa: CUR_EMP, sitio: CUR_SITIO, doc_id: docId, necesario }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        window.Alert && window.Alert.error(data.error || 'No se pudo cambiar');
+        if (doc) { doc.necesario = !necesario; render(DATOS); }
+      }
+    } catch (e) {
+      if (doc) { doc.necesario = !necesario; render(DATOS); }
+    }
+  });
+
+  // ── Asignar un archivo inesperado a un documento ──────────────────────────
+  const modalAsignar = document.getElementById('modal-asignar');
+  const asignarSel = document.getElementById('asignar-doc');
+  let _asig = null;
+
+  const inespChecks = () => Array.from(document.querySelectorAll('#inesperados .js-inesp-check'));
+  const seleccionInesperados = () =>
+    inespChecks().filter(c => c.checked).map(c => (DATOS.inesperados || [])[+c.dataset.i]).filter(Boolean);
+
+  function actualizarSelInesperados() {
+    const n = seleccionInesperados().length;
+    const btn = document.getElementById('inesp-asignar-sel');
+    const cnt = document.getElementById('inesp-sel-count');
+    if (btn) btn.disabled = n === 0;
+    if (cnt) cnt.textContent = n ? `${n} seleccionado(s)` : '';
+  }
+
+  document.getElementById('inesperados').addEventListener('click', (ev) => {
+    const b = ev.target.closest('.js-asignar');
+    if (b) { const x = (DATOS.inesperados || [])[+b.dataset.i]; if (x) abrirModalAsignar([x]); return; }
+    const bs = ev.target.closest('#inesp-asignar-sel');
+    if (bs) { abrirModalAsignar(seleccionInesperados()); return; }
+  });
+
+  document.getElementById('inesperados').addEventListener('change', (ev) => {
+    if (ev.target.id === 'inesp-check-all') {
+      const on = ev.target.checked;
+      inespChecks().forEach(c => { c.checked = on; });
+    }
+    actualizarSelInesperados();
+  });
+
+  function abrirModalAsignar(list) {
+    if (!list || !list.length) return;
+    _asig = list;
+    document.getElementById('asignar-file').textContent =
+      list.length === 1 ? list[0].nombre : `${list.length} archivos seleccionados`;
+    asignarSel.innerHTML = (DATOS.documentos || [])
+      .filter(doc => ES_SUPERUSER || doc.necesario !== false)
+      .map(doc =>
+      `<option value="${doc.id}">${escapeHtml(doc.etapa_display)} · ${doc.carpeta ? escapeHtml(doc.carpeta) + ' / ' : ''}${escapeHtml(doc.nombre)}</option>`).join('');
+    modalAsignar.showModal();
+  }
+
+  document.getElementById('asignar-ok').addEventListener('click', async () => {
+    if (!_asig || !_asig.length) return;
+    const docId = asignarSel.value;
+    const okBtn = document.getElementById('asignar-ok');
+    okBtn.disabled = true;
+    try {
+      let asignados = 0;
+      for (const item of _asig) {
+        const r = await fetch(ASIGNAR_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+          body: JSON.stringify({ empresa: CUR_EMP, sitio: CUR_SITIO, path: item.path, doc_id: docId }),
+        });
+        const data = await r.json();
+        if (!r.ok) { window.Alert && window.Alert.error(data.error || `No se pudo asignar ${item.nombre}`); continue; }
+        asignados++;
+        // AJAX: quito de inesperados y lo agrego al documento.
+        if (DATOS) {
+          DATOS.inesperados = (DATOS.inesperados || []).filter(x => x.path !== item.path);
+          const doc = (DATOS.documentos || []).find(d => String(d.id) === String(docId));
+          if (doc) {
+            doc.archivos = (doc.archivos || []).concat([{ nombre: item.nombre, fecha: item.fecha, path: item.path, origen: item.origen }]);
+            if (doc.estado === 'falta') {
+              doc.estado = 'presente';
+              const ag = (DATOS.agregados || {})[doc.etapa];
+              if (ag) ag.presentes += 1;
+              DATOS.presentes = (DATOS.presentes || 0) + 1;
+            }
+          }
+        }
+      }
+      modalAsignar.close();
+      if (asignados) window.Alert && window.Alert.success(`${asignados} archivo(s) asignado(s)`, { autoHide: 5000 });
+      if (DATOS) render(DATOS);
+      _asig = null;
+    } catch (e) {
+      window.Alert && window.Alert.error(e.message || 'Error al asignar');
+    } finally {
+      okBtn.disabled = false;
+    }
+  });
+
+  // Borrado en dos pasos. El rol MARCA (X); el Coordinador/superusuario ACEPTA (borra) o RECHAZA.
+  async function _postElim(url, path, okMsg, errMsg) {
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify({ empresa: CUR_EMP, sitio: CUR_SITIO, path }),
+      });
+      const data = await r.json();
+      if (!r.ok) { window.Alert && window.Alert.error(data.error || errMsg); return; }
+      if (okMsg) window.Alert && window.Alert.success(okMsg, { autoHide: 4000 });
+      await silentReload();
+    } catch (e) { window.Alert && window.Alert.error(e.message || errMsg); }
+  }
+
+  function marcarEliminacion(path, nombre) {
+    const hacer = () => _postElim(ELIMINAR_URL, path, 'Archivo marcado para borrado', 'No se pudo marcar');
+    if (window.Alert && window.Alert.confirm) {
+      window.Alert.confirm(`¿Marcar “${nombre}” para borrado? Un Coordinador deberá aceptarlo.`,
+        hacer, null, { confirmText: 'Marcar', confirmClass: 'btn-warning', type: 'warning' });
+    } else if (confirm(`¿Marcar “${nombre}” para borrado?`)) { hacer(); }
+  }
+
+  function aceptarEliminacion(path, nombre) {
+    const hacer = () => _postElim(ACEPTAR_ELIM_URL, path, 'Archivo eliminado', 'No se pudo eliminar');
+    if (window.Alert && window.Alert.confirm) {
+      window.Alert.confirm(`¿Eliminar definitivamente “${nombre}” de Nextcloud?`,
+        hacer, null, { confirmText: 'Eliminar', confirmClass: 'btn-delete', type: 'error' });
+    } else if (confirm(`¿Eliminar “${nombre}”?`)) { hacer(); }
+  }
+
+  function rechazarEliminacion(path) {
+    _postElim(RECHAZAR_ELIM_URL, path, 'Borrado rechazado', 'No se pudo rechazar');
+  }
+
+  empresaSel.addEventListener('change', () => {
+    localStorage.setItem(STORAGE_EMPRESA, empresaSel.value);
+    cargarSitios();
+  });
+  // OJO: no pasar `cargarSeguimiento` directo — el Event llegaría como `forzar` (truthy) y
+  // mandaría refresh=1 en cada cambio de sitio, saltándose el fast-path.
+  sitioSel.addEventListener('change', () => cargarSeguimiento());
+
+  // Las imágenes/videos se cargan como archivos de su documento (p. ej. "Registro
+  // fotográfico") con el botón de subir de esa fila; no hay subida multimedia aparte.
+
+  // ── Refrescar una sola carpeta /20* (solo superuser) ──────────────────────
+  if (ES_SUPERUSER) {
+    const refSel = document.getElementById('refresh-carpeta');
+    const refBtn = document.getElementById('refresh-carpeta-btn');
+    fetch(API_CARPETAS20).then(r => r.json()).then(d => {
+      const carpetas = (d && d.carpetas) || [];
+      refSel.innerHTML = carpetas.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')
+        || '<option value="">(sin carpetas)</option>';
+    }).catch(() => { refSel.innerHTML = '<option value="">(error)</option>'; });
+
+    refBtn.addEventListener('click', async () => {
+      const carpeta = refSel.value;
+      if (!CUR_SITIO || !carpeta) return;
+      const icon = refBtn.querySelector('i');
+      refBtn.disabled = true; icon.classList.add('fa-spin');
+      try {
+        const fd = new FormData();
+        fd.append('empresa', CUR_EMP); fd.append('sitio', CUR_SITIO); fd.append('carpeta', carpeta);
+        const r = await fetch(REFRESH_CARPETA_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: fd });
+        const data = await r.json();
+        if (!r.ok || data.error) { window.Alert && window.Alert.error(data.error || 'No se pudo refrescar'); return; }
+        render(data); showState('resultado');
+        window.Alert && window.Alert.success(`Carpeta re-escaneada: ${carpeta}`, { autoHide: 4000 });
+      } catch (e) {
+        window.Alert && window.Alert.error(e.message || 'Error al refrescar');
+      } finally {
+        refBtn.disabled = false; icon.classList.remove('fa-spin');
+      }
+    });
+
+    // ── Actualizar estructura: guarda la estructura mostrada en la plantilla asignada ──
+    const estBtn = document.getElementById('actualizar-estructura-btn');
+    estBtn.addEventListener('click', () => {
+      if (!CUR_EMP || !CUR_SITIO) return;
+      const ejecutar = async () => {
+        const icon = estBtn.querySelector('i');
+        estBtn.disabled = true; icon.classList.add('fa-spin');
+        try {
+          const fd = new FormData();
+          fd.append('empresa', CUR_EMP); fd.append('sitio', CUR_SITIO);
+          const r = await fetch(ACTUALIZAR_ESTRUCTURA_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: fd });
+          const data = await r.json();
+          if (!r.ok || data.error) { window.Alert && window.Alert.error(data.error || 'No se pudo guardar la estructura'); return; }
+          render(data); showState('resultado');
+          const s = data.resumen || {};
+          const compartida = s.es_default
+            ? 'Es la estructura base: la usan todos los sitios sin estructura propia.'
+            : `La usan ${s.n_sitios} sitio(s): todos quedan iguales.`;
+          window.Alert && window.Alert.success(
+            `Estructura guardada en «${s.plantilla}» (${s.total} doc.). ${compartida}`,
+            { autoHide: 6000 });
+        } catch (e) {
+          window.Alert && window.Alert.error(e.message || 'Error al guardar la estructura');
+        } finally {
+          icon.classList.remove('fa-spin');
+          estBtn.disabled = !CUR_SITIO;
+        }
+      };
+      const nombre = (DATOS && DATOS.plantilla && DATOS.plantilla.nombre) || 'la plantilla asignada';
+      const msg = `¿Guardar la estructura que ves ahora en la plantilla «${nombre}»? `
+        + 'Se guarda en su lugar (no crea copia por sitio) y se comparte: todos los sitios que usan esa plantilla quedan iguales.';
+      if (window.Alert && window.Alert.confirm) {
+        window.Alert.confirm(msg, ejecutar, null, {
+          title: 'Guardar estructura', confirmText: 'Guardar', confirmClass: 'btn-warning',
+          type: 'warning', icon: 'fa-solid fa-floppy-disk',
+        });
+      } else if (confirm(msg)) { ejecutar(); }
+    });
+  }
+
+  const savedEmpresa = localStorage.getItem(STORAGE_EMPRESA);
+  if (savedEmpresa && Array.from(empresaSel.options).some(o => o.value === savedEmpresa)) {
+    empresaSel.value = savedEmpresa;
+  }
+  cargarSitios();
+})();
+</script>
+{% endblock %}
+
+{% block footer %}{% include 'footer.html' %}{% endblock %}

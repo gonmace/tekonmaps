@@ -1,0 +1,9 @@
+Django>=4.2,<5.1
+django-tailwind>=4.0
+whitenoise>=6.7
+python-decouple>=3.8
+requests>=2.32
+django-axes>=6.0
+django-csp>=3.8,<4
+psycopg2-binary>=2.9
+gunicorn>=23.0

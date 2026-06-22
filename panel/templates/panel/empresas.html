@@ -1,0 +1,43 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Empresas — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <h1 class="text-2xl font-bold">Empresas</h1>
+    {% if codes %}
+    <p class="text-base-content/60 text-sm">Códigos en companies.json: {% for c in codes %}<span class="badge badge-sm badge-ghost">{{ c }}</span> {% endfor %}</p>
+    {% endif %}
+  </div>
+  <a href="{% url 'panel:empresa_crear' %}" class="btn btn-info btn-sm">Nueva empresa</a>
+</div>
+
+<div class="card bg-base-100 border border-base-300 shadow-xs">
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr><th>Empresa</th><th>Link admin</th><th>Link visitante</th><th class="text-right">Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td class="font-semibold">{{ item.nombre }}</td>
+          <td class="max-w-xs truncate text-base-content/70">{{ item.link_admin|default:"—" }}</td>
+          <td class="max-w-xs truncate text-base-content/70">{{ item.link_visitante|default:"—" }}</td>
+          <td class="text-right whitespace-nowrap">
+            <a href="{% url 'panel:empresa_editar' item.pk %}" class="btn btn-edit btn-xs">Editar</a>
+            <form method="post" action="{% url 'panel:empresa_eliminar' item.pk %}" class="inline" onsubmit="return confirm('¿Eliminar {{ item.nombre|escapejs }}?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-delete btn-xs">Eliminar</button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center text-base-content/50 py-6">Sin empresas. Crea la primera.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

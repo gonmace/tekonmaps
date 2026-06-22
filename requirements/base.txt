@@ -1,5 +1,0 @@
-Django>=4.2,<5.1
-python-dotenv==1.0.1
-whitenoise==6.7.0
-django-tailwind>=4.4.0
-requests>=2.32.0

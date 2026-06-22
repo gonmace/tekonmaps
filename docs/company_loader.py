@@ -22,7 +22,7 @@ class Company:
         return f"/{self.carpeta_nextcloud}"
 
     def link_para_rol(self, rol):
-        if rol == "administrador" and self.link_admin:
+        if rol != "visitante" and self.link_admin:
             return self.link_admin
         return self.link_visitante
 

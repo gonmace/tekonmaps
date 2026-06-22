@@ -1,19 +1,24 @@
+import json
 from collections import Counter
 from datetime import datetime
 from urllib.parse import unquote
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
+from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
-from django.shortcuts import render
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
-from . import company_loader
-from .models import EstructuraCache, ProyectoFinalCache, SitioCache
+from . import company_loader, nextcloud, seguimiento
+from .models import (
+    ACCIONES_REVISION, AsignacionArchivo, ConfirmacionDocumento, DocumentoEsperado,
+    DocumentoNoNecesario, EliminacionPendiente, EstructuraCache, ObservacionDocumento,
+    ProyectoFinalCache, ROL_COLORES, SitioCache,
+)
 
-
-WEBHOOK_URL = "https://n8npozos.magoreal.com/webhook/nc-tekon"
-WEBHOOK_DEEP_URL = "https://n8npozos.magoreal.com/webhook/nc-tekon-deep"
 
 FINAL_ROOT_PATH = "/20-PTI SP"
 
@@ -24,7 +29,7 @@ def _parse_name(path_encoded):
 
 
 def _parse_item_date(item):
-    """Extrae timestamp de un item. n8n Nextcloud devuelve lastModified (camelCase)."""
+    """Extrae timestamp de un item. El cliente WebDAV entrega lastModified como float."""
     if not item or not isinstance(item, dict):
         return None
     val = (
@@ -83,20 +88,36 @@ def _format_lastmod(ts):
 
 
 def _fetch_items(path):
-    resp = requests.get(WEBHOOK_URL, params={"path": path}, timeout=15)
-    resp.raise_for_status()
-    try:
-        data = resp.json()
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
+    """Lista los items directos de una carpeta vía WebDAV, en el formato legacy
+    {type, path, name, lastModified} que consumen el resto de helpers."""
+    return [
+        {
+            "type": "folder" if it["es_dir"] else "file",
+            "path": it["path"],
+            "name": it["nombre"],
+            "lastModified": it["mtime"],
+        }
+        for it in nextcloud.list_folder(path)
+    ]
 
 
 def _fetch_deep(root_folder_path):
-    """Llama al endpoint deep que devuelve {subfolder: {ext: count}} en una sola petición."""
-    resp = requests.get(WEBHOOK_DEEP_URL, params={"path": root_folder_path}, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+    """Cuenta archivos por extensión en cada subcarpeta inmediata de root (recursivo).
+    Devuelve {subcarpeta: {ext: count}}, el formato que consume _parse_subfolders.
+    Reemplaza al antiguo endpoint deep de n8n."""
+    subs = [i for i in _fetch_items(root_folder_path) if i.get("type") == "folder"]
+    if not subs:
+        return {}
+
+    def one(item):
+        nombre = _parse_name(item["path"])
+        return nombre, _count_files_in_folder(f"{root_folder_path}/{nombre}")
+
+    result = {}
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for nombre, counts in ex.map(one, subs):
+            result[nombre] = counts
+    return result
 
 
 def _parse_subfolders(deep):
@@ -170,18 +191,99 @@ def _build_tree(path, depth=0, max_depth=3, structure_only=False):
 
 
 def _get_user_rol(user):
-    """Devuelve el rol del usuario ('administrador' o 'visitante')."""
+    """Rol único del usuario: 'visitante' o una función ITO ('rol_*')."""
     try:
         return user.profile.rol
     except Exception:
         return "visitante"
 
 
+def _es_admin(user):
+    """Puede subir archivos y confirmar (equipo ITO): cualquier rol que no sea visitante."""
+    return user.is_superuser or _get_user_rol(user) != "visitante"
+
+
+def _sitios_permitidos(user, empresa):
+    """Sitios a los que el usuario puede acceder en una empresa.
+
+    None = sin restricción (superusuario). set() = ninguno. Restrictivo:
+    un usuario sin asignaciones no ve ningún sitio.
+    """
+    if user.is_superuser:
+        return None
+    from .models import AccesoSitio
+    return set(AccesoSitio.objects.filter(user=user, empresa=empresa)
+               .values_list("sitio", flat=True))
+
+
+def _empresas_permitidas(user):
+    """Empresas con al menos un sitio asignado. None = sin restricción (superusuario)."""
+    if user.is_superuser:
+        return None
+    from .models import AccesoSitio
+    return set(AccesoSitio.objects.filter(user=user)
+               .values_list("empresa", flat=True))
+
+
+def _es_coordinador(user):
+    """Puede aceptar/rechazar borrados de archivos: Coordinador o superusuario."""
+    return user.is_superuser or _get_user_rol(user) == "rol_coordinador"
+
+
+def _es_tk_redline(user):
+    """Puede dejar una observación general (rol TK Redline) en cualquier documento."""
+    return user.is_superuser or _get_user_rol(user) == "rol_tk_redline"
+
+
+def _puede_ver_seccion(user, campo):
+    """Acceso a una sección del navbar (``acceso_contratista``/``acceso_finales``/
+    ``acceso_seguimiento``). El superusuario ve todo. Sin perfil → sin acceso."""
+    if user.is_superuser:
+        return True
+    try:
+        return getattr(user.profile, campo)
+    except Exception:
+        return False
+
+
+def _landing_url(user):
+    """Primera sección del navbar a la que el usuario tiene acceso, o 'home' si ninguna."""
+    if _puede_ver_seccion(user, "acceso_contratista"):
+        return reverse("docs:index")
+    if _puede_ver_seccion(user, "acceso_finales"):
+        return reverse("docs:final")
+    if _puede_ver_seccion(user, "acceso_seguimiento"):
+        return reverse("docs:seguimiento")
+    return reverse("home")
+
+
+def _guard_seccion(request, campo):
+    """Si el usuario no puede ver la sección, devuelve un redirect amable (a la primera
+    sección permitida o a 'home') con un aviso; si puede, devuelve None."""
+    if _puede_ver_seccion(request.user, campo):
+        return None
+    messages.warning(request, "No tienes acceso a esa sección.")
+    return redirect(_landing_url(request.user))
+
+
+def _gate_api(user, *campos):
+    """JsonResponse 403 si el usuario no tiene NINGUNA de las secciones dadas; None si ok."""
+    if any(_puede_ver_seccion(user, c) for c in campos):
+        return None
+    return JsonResponse({"error": "No tienes acceso a esta sección."}, status=403)
+
+
 @login_required
 def index(request):
     """Página Docs. Contratista. Las cards se cargan por AJAX."""
+    guard = _guard_seccion(request, "acceso_contratista")
+    if guard:
+        return guard
     rol = _get_user_rol(request.user)
     empresas_list = company_loader.get_all()
+    permitidas = _empresas_permitidas(request.user)
+    if permitidas is not None:
+        empresas_list = [e for e in empresas_list if e.nombre in permitidas]
     primera = empresas_list[0] if empresas_list else None
     empresa = request.GET.get("empresa", primera.nombre if primera else "")
     if not any(e.nombre == empresa for e in empresas_list):
@@ -198,6 +300,9 @@ def index(request):
 @login_required
 def final(request):
     """Página Docs. Finales — árbol de /20-PTI SP."""
+    guard = _guard_seccion(request, "acceso_finales")
+    if guard:
+        return guard
     from django.conf import settings
     from .models import SiteConfig
     rol = _get_user_rol(request.user)
@@ -213,16 +318,491 @@ def final(request):
 
 
 @login_required
+def seguimiento_view(request):
+    """Tablero de seguimiento de completitud de documentos del ITO."""
+    guard = _guard_seccion(request, "acceso_seguimiento")
+    if guard:
+        return guard
+    empresas = company_loader.get_all()
+    permitidas = _empresas_permitidas(request.user)
+    if permitidas is not None:
+        empresas = [e for e in empresas if e.nombre in permitidas]
+    return render(request, "docs/seguimiento.html", {
+        "titulo_pagina": "Seguimiento",
+        "empresas": empresas,
+        "es_admin": _es_admin(request.user),
+        "es_coordinador": _es_coordinador(request.user),
+        "es_tk_redline": _es_tk_redline(request.user),
+        "es_superuser": request.user.is_superuser,
+        "roles_leyenda": [(sigla, lbl, ROL_COLORES.get(sigla, "#6b7280"))
+                          for _, lbl, sigla in DocumentoEsperado.ROLES],
+    })
+
+
+@login_required
+def api_seguimiento(request):
+    """GET: estado de completitud de documentos del ITO para (empresa, sitio)."""
+    denied = _gate_api(request.user, "acceso_seguimiento")
+    if denied:
+        return denied
+    empresa = request.GET.get("empresa", "").strip()
+    sitio = request.GET.get("sitio", "").strip()
+    if not empresa or not sitio:
+        return JsonResponse({"error": "Faltan 'empresa' y/o 'sitio'.", "documentos": []}, status=400)
+    permitidos = _sitios_permitidos(request.user, empresa)
+    if permitidos is not None and sitio not in permitidos:
+        return JsonResponse({"error": "No tienes acceso a este sitio.", "documentos": []}, status=403)
+    forzar = request.GET.get("refresh") in ("1", "true")
+    try:
+        return JsonResponse(seguimiento.estado_sitio(empresa, sitio, forzar=forzar))
+    except Exception as e:
+        return JsonResponse({"error": str(e), "documentos": []}, status=500)
+
+
+@login_required
+def api_carpetas20(request):
+    """GET (superuser): carpetas raíz /20* (constructora) para el selector de refresh."""
+    if not request.user.is_superuser:
+        return JsonResponse({"carpetas": []})
+    try:
+        return JsonResponse({"carpetas": seguimiento.roots_constructora(forzar=True)})
+    except Exception:
+        return JsonResponse({"carpetas": []})
+
+
+@login_required
+def refrescar_carpeta(request):
+    """POST (superuser): re-escanea SOLO la carpeta /20* indicada para el sitio actual
+    (las demás carpetas salen de la caché por carpeta). Devuelve el estado actualizado."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    empresa = request.POST.get("empresa", "").strip()
+    sitio = request.POST.get("sitio", "").strip()
+    carpeta = request.POST.get("carpeta", "").strip()
+    if not (empresa and sitio and carpeta):
+        return JsonResponse({"error": "Faltan datos."}, status=400)
+    try:
+        return JsonResponse(seguimiento.estado_sitio(empresa, sitio, forzar_root=carpeta))
+    except Exception as e:
+        return JsonResponse({"error": str(e), "documentos": []}, status=500)
+
+
+@login_required
+def actualizar_estructura(request):
+    """POST (superuser): guarda la estructura mostrada en la plantilla asignada (en su lugar,
+    compartida; sin re-escanear carpetas ni crear copias por sitio) y devuelve el estado del
+    sitio recalculado + un resumen."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    empresa = request.POST.get("empresa", "").strip()
+    sitio = request.POST.get("sitio", "").strip()
+    if not (empresa and sitio):
+        return JsonResponse({"error": "Faltan 'empresa' y/o 'sitio'."}, status=400)
+    try:
+        resumen = seguimiento.guardar_estructura(empresa, sitio)
+        estado = seguimiento.estado_sitio(empresa, sitio, forzar=True)
+        return JsonResponse({"resumen": resumen, **estado})
+    except Exception as e:
+        return JsonResponse({"error": str(e), "documentos": []}, status=500)
+
+
+@login_required
+def subir_archivo(request):
+    """POST multipart (solo administrador): sube un archivo para un documento al área ITO.
+    Campos: empresa, sitio, doc_id, file."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    empresa = request.POST.get("empresa", "").strip()
+    sitio = request.POST.get("sitio", "").strip()
+    doc_id = request.POST.get("doc_id", "").strip()
+    archivos = request.FILES.getlist("file")
+    if not (empresa and sitio and doc_id and archivos):
+        return JsonResponse({"error": "Faltan datos o archivo."}, status=400)
+    doc = get_object_or_404(DocumentoEsperado, pk=doc_id)
+    nombres = request.POST.getlist("nombre")  # nombre final por archivo (front)
+    subidos = []
+    try:
+        for i, archivo in enumerate(archivos):
+            nombre = nombres[i] if i < len(nombres) and nombres[i].strip() else archivo.name
+            destino = seguimiento.subir_documento(
+                empresa, sitio, doc, archivo.read(), nombre,
+                getattr(archivo, "content_type", None), usuario=request.user)
+            subidos.append({"path": destino, "nombre": destino.rsplit("/", 1)[-1]})
+    except Exception as e:
+        return JsonResponse({"error": f"No se pudo cargar: {e}"}, status=500)
+    return JsonResponse({"ok": True, "subidos": len(subidos), "archivos": subidos,
+                         "roles": seguimiento.roles_estado(empresa, sitio, doc)})
+
+
+@login_required
+def subir_multimedia(request):
+    """POST multipart (admin): sube imágenes/videos a la carpeta del sitio en el área ITO.
+    Campos: empresa, sitio, tipo ('imagenes'|'videos'), file (1+). Devuelve el estado."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    empresa = request.POST.get("empresa", "").strip()
+    sitio = request.POST.get("sitio", "").strip()
+    tipo = request.POST.get("tipo", "").strip()
+    archivos = request.FILES.getlist("file")
+    if not (empresa and sitio and tipo in ("imagenes", "videos") and archivos):
+        return JsonResponse({"error": "Faltan datos o archivo."}, status=400)
+    try:
+        for archivo in archivos:
+            seguimiento.subir_multimedia(sitio, tipo, archivo.read(), archivo.name,
+                                         getattr(archivo, "content_type", None))
+    except Exception as e:
+        return JsonResponse({"error": f"No se pudo cargar: {e}"}, status=500)
+    seguimiento.invalidar_cache(empresa, sitio)
+    return JsonResponse(seguimiento.estado_sitio(empresa, sitio))
+
+
+@login_required
+def confirmar(request):
+    """POST JSON (solo administrador): alterna la confirmación de un rol para un documento.
+    Body: {empresa, sitio, doc_id, rol}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    try:
+        data = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "JSON inválido."}, status=400)
+    empresa = (data.get("empresa") or "").strip()
+    sitio = (data.get("sitio") or "").strip()
+    doc_id = data.get("doc_id")
+    rol = (data.get("rol") or "").strip()
+    roles_validos = {c for c, _, _ in DocumentoEsperado.ROLES}
+    if not (empresa and sitio and doc_id and rol in roles_validos):
+        return JsonResponse({"error": "Datos inválidos."}, status=400)
+    doc = get_object_or_404(DocumentoEsperado, pk=doc_id)
+    # Solo las acciones de revisión se confirman a mano; el resto va por subida.
+    if getattr(doc, rol, "") not in ACCIONES_REVISION:
+        return JsonResponse({"error": "Ese rol se confirma al cargar el archivo, no manualmente."}, status=400)
+    existente = ConfirmacionDocumento.objects.filter(
+        empresa=empresa, sitio=sitio, documento=doc, rol=rol).first()
+    if existente:
+        existente.delete()
+        seguimiento.invalidar_datos(empresa, sitio)
+        return JsonResponse({"confirmado": False})
+    c = ConfirmacionDocumento.objects.create(
+        empresa=empresa, sitio=sitio, documento=doc, rol=rol, usuario=request.user)
+    # Conforme y observación son excluyentes: confirmar limpia la observación de ese rol.
+    ObservacionDocumento.objects.filter(
+        empresa=empresa, sitio=sitio, documento=doc, rol=rol).delete()
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"confirmado": True,
+                         "usuario": request.user.get_username(),
+                         "fecha": seguimiento._format_fecha(c.fecha)})
+
+
+@login_required
+def observar(request):
+    """POST JSON (administrador/revisor): marca un documento como **no conforme** con una
+    nota; queda ⚠ hasta que se corrija. Body: {empresa, sitio, doc_id, rol, texto}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    try:
+        data = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "JSON inválido."}, status=400)
+    empresa = (data.get("empresa") or "").strip()
+    sitio = (data.get("sitio") or "").strip()
+    doc_id = data.get("doc_id")
+    rol = (data.get("rol") or "").strip()
+    texto = (data.get("texto") or "").strip()
+    roles_validos = {c for c, _, _ in DocumentoEsperado.ROLES}
+    if not (empresa and sitio and doc_id and rol in roles_validos and texto):
+        return JsonResponse({"error": "Datos inválidos (falta la nota)."}, status=400)
+    doc = get_object_or_404(DocumentoEsperado, pk=doc_id)
+    existente = ObservacionDocumento.objects.filter(
+        empresa=empresa, sitio=sitio, documento=doc, rol=rol).first()
+    # El autor siempre puede editar su propia observación. Si no, TK Redline (o superuser)
+    # puede observar cualquier documento; el resto, solo donde su rol revisa.
+    es_autor = bool(existente and existente.usuario_id == request.user.id)
+    es_obs_general = rol == "rol_tk_redline" and _es_tk_redline(request.user)
+    if not es_autor and not es_obs_general and getattr(doc, rol, "") not in ACCIONES_REVISION:
+        return JsonResponse({"error": "Solo los roles de revisión pueden observar."}, status=400)
+    o = ObservacionDocumento.objects.update_or_create(
+        empresa=empresa, sitio=sitio, documento=doc, rol=rol,
+        defaults={"usuario": request.user, "texto": texto})[0]
+    # No conforme y conforme son excluyentes: observar quita la confirmación de ese rol.
+    ConfirmacionDocumento.objects.filter(
+        empresa=empresa, sitio=sitio, documento=doc, rol=rol).delete()
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"ok": True, "usuario": request.user.get_username(),
+                         "fecha": seguimiento._format_fecha(o.fecha)})
+
+
+@login_required
+def quitar_observacion(request):
+    """POST JSON (**solo superusuario**): borra definitivamente la observación de un rol.
+    Body: {empresa, sitio, doc_id, rol}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Solo un superusuario puede borrar observaciones."}, status=403)
+    try:
+        data = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "JSON inválido."}, status=400)
+    empresa = (data.get("empresa") or "").strip()
+    sitio = (data.get("sitio") or "").strip()
+    doc_id = data.get("doc_id")
+    rol = (data.get("rol") or "").strip()
+    if not (empresa and sitio and doc_id and rol):
+        return JsonResponse({"error": "Datos inválidos."}, status=400)
+    ObservacionDocumento.objects.filter(
+        empresa=empresa, sitio=sitio, documento_id=doc_id, rol=rol).delete()
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+def enmendar_observacion(request):
+    """POST JSON: **solo el autor** de la observación la marca como enmendada (✓ verde) o
+    lo deshace. Body: {empresa, sitio, doc_id, rol, enmendada}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    try:
+        data = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "JSON inválido."}, status=400)
+    empresa = (data.get("empresa") or "").strip()
+    sitio = (data.get("sitio") or "").strip()
+    doc_id = data.get("doc_id")
+    rol = (data.get("rol") or "").strip()
+    if not (empresa and sitio and doc_id and rol):
+        return JsonResponse({"error": "Datos inválidos."}, status=400)
+    o = ObservacionDocumento.objects.filter(
+        empresa=empresa, sitio=sitio, documento_id=doc_id, rol=rol).first()
+    if not o:
+        return JsonResponse({"error": "No existe la observación."}, status=404)
+    if o.usuario_id != request.user.id:
+        return JsonResponse({"error": "Solo quien dejó la observación puede marcarla como enmendada."}, status=403)
+    enmendada = bool(data.get("enmendada", True))
+    # .update() evita que ``auto_now`` mueva la fecha original de la observación.
+    ObservacionDocumento.objects.filter(pk=o.pk).update(enmendada=enmendada)
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"ok": True, "enmendada": enmendada})
+
+
+@login_required
+def marcar_necesario(request):
+    """POST JSON (solo superuser): marca un documento como necesario/no-necesario para
+    el sitio. Body: {empresa, sitio, doc_id, necesario}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    try:
+        data = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "JSON inválido."}, status=400)
+    empresa = (data.get("empresa") or "").strip()
+    sitio = (data.get("sitio") or "").strip()
+    doc_id = data.get("doc_id")
+    necesario = bool(data.get("necesario"))
+    if not (empresa and sitio and doc_id):
+        return JsonResponse({"error": "Datos inválidos."}, status=400)
+    doc = get_object_or_404(DocumentoEsperado, pk=doc_id)
+    if necesario:
+        DocumentoNoNecesario.objects.filter(empresa=empresa, sitio=sitio, documento=doc).delete()
+    else:
+        DocumentoNoNecesario.objects.get_or_create(empresa=empresa, sitio=sitio, documento=doc)
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"ok": True, "necesario": necesario})
+
+
+@login_required
+def asignar_archivo(request):
+    """POST JSON (solo administrador): asigna manualmente un archivo a un documento.
+    Body: {empresa, sitio, path, doc_id}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    try:
+        data = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "JSON inválido."}, status=400)
+    empresa = (data.get("empresa") or "").strip()
+    sitio = (data.get("sitio") or "").strip()
+    path = data.get("path") or ""
+    doc_id = data.get("doc_id")
+    if not (empresa and sitio and doc_id and path.startswith("/20")):
+        return JsonResponse({"error": "Datos inválidos."}, status=400)
+    doc = get_object_or_404(DocumentoEsperado, pk=doc_id)
+    AsignacionArchivo.objects.update_or_create(
+        empresa=empresa, sitio=sitio, path=path,
+        defaults={"documento": doc, "usuario": request.user})
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"ok": True, "doc_id": doc.id})
+
+
+def _parse_eliminacion(request):
+    """Valida el body común de las vistas de eliminación. Devuelve (empresa, sitio, path) o
+    una ``JsonResponse`` de error."""
+    try:
+        data = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "JSON inválido."}, status=400)
+    empresa = (data.get("empresa") or "").strip()
+    sitio = (data.get("sitio") or "").strip()
+    path = data.get("path") or ""
+    if not path.startswith("/20") or not (empresa and sitio):
+        return JsonResponse({"error": "Datos inválidos."}, status=400)
+    return empresa, sitio, path
+
+
+@login_required
+def eliminar_archivo(request):
+    """POST JSON (administrador): NO borra; **marca** el archivo como pendiente de borrado
+    (X). El borrado real lo acepta un Coordinador/superusuario. Body: {empresa, sitio, path}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    parsed = _parse_eliminacion(request)
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    empresa, sitio, path = parsed
+    EliminacionPendiente.objects.update_or_create(
+        empresa=empresa, sitio=sitio, path=path, defaults={"usuario": request.user})
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"ok": True, "pendiente": True})
+
+
+@login_required
+def aceptar_eliminacion(request):
+    """POST JSON (Coordinador/superusuario): acepta la marca y **borra** el archivo de
+    Nextcloud. Body: {empresa, sitio, path}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_coordinador(request.user):
+        return JsonResponse({"error": "Solo el Coordinador o un superusuario puede aceptar borrados."}, status=403)
+    parsed = _parse_eliminacion(request)
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    empresa, sitio, path = parsed
+    try:
+        nextcloud.delete(path)
+    except Exception as e:
+        return JsonResponse({"error": f"No se pudo eliminar: {e}"}, status=500)
+    EliminacionPendiente.objects.filter(empresa=empresa, sitio=sitio, path=path).delete()
+    seguimiento.limpiar_autoconfirmaciones(empresa, sitio, path)
+    seguimiento.invalidar_cache(empresa, sitio)
+    return JsonResponse({"ok": True, "eliminado": True})
+
+
+@login_required
+def rechazar_eliminacion(request):
+    """POST JSON (Coordinador/superusuario): quita la marca de borrado (el archivo se queda).
+    Body: {empresa, sitio, path}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_coordinador(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    parsed = _parse_eliminacion(request)
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    empresa, sitio, path = parsed
+    EliminacionPendiente.objects.filter(empresa=empresa, sitio=sitio, path=path).delete()
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"ok": True, "pendiente": False})
+
+
+@login_required
+def descargar_archivo(request):
+    """GET ?path= : proxy de descarga de un archivo de Nextcloud (para ver/abrir).
+    Solo se permiten rutas bajo el área ITO o bajo carpetas de empresa (que empiecen con '/20')."""
+    path = request.GET.get("path", "")
+    if not path.startswith("/20"):
+        raise Http404("Ruta no permitida.")
+    try:
+        contenido, ctype = nextcloud.download(path)
+    except Exception:
+        raise Http404("No se pudo descargar el archivo.")
+    nombre = path.rsplit("/", 1)[-1]
+    resp = HttpResponse(contenido, content_type=ctype)
+    resp["Content-Disposition"] = f'inline; filename="{nombre}"'
+    return resp
+
+
+def _buscar_template(codigo, archivos):
+    """Elige, entre ``[(nombre, mtime)]``, el archivo de template que mejor calza
+    con ``codigo``. Prioriza: stem exacto > nombre empieza con código > código
+    empieza con stem. Devuelve el nombre o None."""
+    code = codigo.strip().lower()
+    exacto = empieza = contiene = None
+    for nombre, _ in archivos:
+        nl = nombre.lower()
+        stem = nl.rsplit(".", 1)[0]
+        if stem == code or nl == code:
+            return nombre
+        if empieza is None and nl.startswith(code):
+            empieza = nombre
+        if contiene is None and code.startswith(stem):
+            contiene = nombre
+    return exacto or empieza or contiene
+
+
+@login_required
+def descargar_template(request, pk):
+    """Descarga el template de un documento esperado, **únicamente** desde la carpeta
+    de plantillas en /20-ITO_SEGUIMIENTO/00-PLANTILLAS (búsqueda recursiva por código)."""
+    doc = get_object_or_404(DocumentoEsperado, pk=pk)
+    if not doc.codigo:
+        raise Http404("El documento no tiene template asociado.")
+    try:
+        items = [it for it in nextcloud.tree(seguimiento.TEMPLATES_PATH, max_depth=4)
+                 if not it["es_dir"]]
+    except Exception:
+        raise Http404("No se pudo acceder a la carpeta de plantillas.")
+    nombre = _buscar_template(doc.codigo, [(it["nombre"], 0) for it in items])
+    if not nombre:
+        raise Http404("No se encontró el template del documento.")
+    match = next(it for it in items if it["nombre"] == nombre)
+    contenido, ctype = nextcloud.download(match["path"])
+    resp = HttpResponse(contenido, content_type=ctype)
+    resp["Content-Disposition"] = f'attachment; filename="{nombre}"'
+    return resp
+
+
+@login_required
 def api_sitios(request):
-    """GET: retorna lista de sitios (carpetas) para la empresa indicada."""
+    """GET: retorna lista de sitios (carpetas) para la empresa indicada.
+    Con ``?generados=1`` solo devuelve los sitios ya generados por la app (con carpeta
+    en el área ITO); lo usa la asignación de Accesos del Panel."""
+    # Compartido por Docs. Contratista y Seguimiento (y el Panel como superuser).
+    denied = _gate_api(request.user, "acceso_contratista", "acceso_seguimiento")
+    if denied:
+        return denied
     empresa = request.GET.get("empresa", "")
     emp = company_loader.get_by_nombre(empresa)
     if not emp:
         return JsonResponse({"sitios": []})
     root_path = emp.root_path()
+    permitidos = _sitios_permitidos(request.user, empresa)
+    solo_generados = request.GET.get("generados") in ("1", "true")
     try:
         raiz_items = [i for i in _fetch_items(root_path) if i.get("type") == "folder"]
         sitios = sorted(_parse_name(item["path"]) for item in raiz_items)
+        if permitidos is not None:
+            sitios = [s for s in sitios if s in permitidos]
+        if solo_generados:
+            generados = seguimiento.sitios_generados()
+            sitios = [s for s in sitios if s in generados]
         return JsonResponse({"sitios": sitios})
     except Exception:
         return JsonResponse({"sitios": []})
@@ -296,6 +876,9 @@ def _fetch_carpetas(empresa_codigo, structure_only=False):
 @login_required
 def api_carpetas(request):
     """GET: retorna carpetas. structure_only=1 solo trae estructura (sin archivos)."""
+    denied = _gate_api(request.user, "acceso_contratista")
+    if denied:
+        return denied
     primera = company_loader.get_first()
     empresa = request.GET.get("empresa", primera.nombre if primera else "")
     structure_only = request.GET.get("structure_only") in ("1", "true", "yes")
@@ -359,6 +942,9 @@ def api_carpetas_archivos(request):
     Respuesta: {"Site1": [{"nombre": "SubA", "archivos": {"pdf": 2}}, ...], "Site2": [...]}
     Si nc-tekon-deep falla, usa nc-tekon para contar archivos por subcarpeta.
     """
+    denied = _gate_api(request.user, "acceso_contratista")
+    if denied:
+        return denied
     empresa = request.GET.get("empresa", "")
     emp = company_loader.get_by_nombre(empresa)
     if not emp:
@@ -441,6 +1027,9 @@ def api_final_tree(request):
     """GET: retorna árbol de proyectos en FINAL_ROOT_PATH.
     ?structure_only=1 → solo nombres de carpetas, sin conteo de archivos (rápido).
     """
+    denied = _gate_api(request.user, "acceso_finales")
+    if denied:
+        return denied
     structure_only = request.GET.get("structure_only") in ("1", "true", "yes")
     try:
         children = _build_tree(FINAL_ROOT_PATH, structure_only=structure_only)
@@ -455,6 +1044,9 @@ def api_final_archivos(request):
     Params: proyectos (nombres separados por coma)
     Respuesta: {"Proyecto1": {"archivos": {...}, "children": [...]}, ...}
     """
+    denied = _gate_api(request.user, "acceso_finales")
+    if denied:
+        return denied
     proyectos_param = request.GET.get("proyectos", "")
     nombres = [s.strip() for s in proyectos_param.split(",") if s.strip()]
 
