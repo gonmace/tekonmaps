@@ -4,6 +4,24 @@
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <script>
+        // Zona horaria del navegador → cookie 'tz'. El servidor la usa para mostrar todas
+        // las fechas/horas en la hora local del usuario (Chile/Bolivia según dónde se conecte).
+        // Si cambió (o no estaba), recarga UNA vez para re-renderizar en la zona correcta.
+        (function () {
+            try {
+                var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                if (!tz) return;
+                var m = document.cookie.match(/(?:^|;\s*)tz=([^;]+)/);
+                var cur = m ? decodeURIComponent(m[1]) : null;
+                if (cur !== tz) {
+                    document.cookie = 'tz=' + encodeURIComponent(tz) + ';path=/;max-age=31536000;samesite=Lax';
+                    // Recarga solo si la cookie realmente persistió (evita loop si están deshabilitadas).
+                    if (document.cookie.indexOf('tz=') !== -1) location.reload();
+                }
+            } catch (e) { /* sin Intl: se usa el fallback del servidor */ }
+        })();
+    </script>
     <title>{% block title %}Tk Redline{% endblock %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="preconnect" href="https://fonts.googleapis.com">

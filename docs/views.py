@@ -1,7 +1,7 @@
 import json
 import os
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 from urllib.parse import unquote
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -12,6 +12,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone as djtz
 
 from . import company_loader, nextcloud, seguimiento
 from .models import (
@@ -78,11 +79,11 @@ _MESES_ES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct
 
 
 def _format_lastmod(ts):
-    """Formatea timestamp a string legible (ej: 25 feb 2025)."""
+    """Formatea timestamp (epoch UTC) a string legible en hora local (ej: 25 feb 2025)."""
     if ts is None:
         return None
     try:
-        dt = datetime.fromtimestamp(ts)
+        dt = djtz.localtime(datetime.fromtimestamp(ts, tz=dt_timezone.utc))
         return f"{dt.day:02d} {_MESES_ES[dt.month - 1]} {dt.year}"
     except (ValueError, TypeError, OSError, IndexError):
         return None

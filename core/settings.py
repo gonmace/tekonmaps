@@ -48,6 +48,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Activa la zona horaria del navegador (cookie 'tz') para todas las fechas/horas.
+    'core.middleware.TimezoneMiddleware',
 ]
 
 INSTALLED_APPS += ['tailwind', 'theme']
@@ -120,7 +122,9 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = 'es-bo'
-TIME_ZONE = 'UTC'
+# Fallback cuando el navegador no informa zona (la cookie 'tz' la sobreescribe por request,
+# vía core.middleware.TimezoneMiddleware). Chile es la audiencia principal.
+TIME_ZONE = config('TIME_ZONE', default='America/Santiago')
 USE_I18N = True
 USE_TZ = True
 

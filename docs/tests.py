@@ -560,3 +560,42 @@ class AccesoTodoSitioTests(TestCase):
         u = self._user("u_ito", "rol_ito")
         self.assertEqual(_sitios_permitidos(u, "AJ"), set())
         self.assertIsNotNone(_denegar_sitio(u, "AJ", "S1"))  # 403: sin AccesoSitio
+
+
+class ZonaHorariaTests(TestCase):
+    """La zona horaria del navegador (cookie 'tz') manda; los timestamps se muestran local."""
+
+    def _tz_activada(self, cookie_val):
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+        from django.utils import timezone
+        from core.middleware import TimezoneMiddleware
+        capturado = {}
+
+        def get_response(req):
+            capturado['tz'] = timezone.get_current_timezone_name()
+            return HttpResponse()
+
+        req = RequestFactory().get('/')
+        if cookie_val is not None:
+            req.COOKIES['tz'] = cookie_val
+        TimezoneMiddleware(get_response)(req)
+        return capturado['tz']
+
+    def test_cookie_valida_activa_su_tz(self):
+        self.assertEqual(self._tz_activada('America/La_Paz'), 'America/La_Paz')
+
+    def test_cookie_invalida_o_ausente_usa_fallback(self):
+        # settings.TIME_ZONE (America/Santiago) es el fallback.
+        self.assertEqual(self._tz_activada('Marte/Olympus'), 'America/Santiago')
+        self.assertEqual(self._tz_activada(None), 'America/Santiago')
+
+    def test_format_fecha_respeta_la_tz_activa(self):
+        from datetime import datetime, timezone as dt_tz
+        from django.utils import timezone
+        from docs.seguimiento import _format_fecha
+        dt = datetime(2025, 1, 1, 1, 0, tzinfo=dt_tz.utc)  # 01:00 UTC del 1 de enero
+        with timezone.override('America/La_Paz'):           # UTC-4 → 31 dic 21:00
+            self.assertEqual(_format_fecha(dt), '31 dic 2024')
+        with timezone.override('UTC'):
+            self.assertEqual(_format_fecha(dt), '01 ene 2025')

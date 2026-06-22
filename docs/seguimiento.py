@@ -14,9 +14,10 @@ Además, cada rol responsable tiene una **confirmación** (``ConfirmacionDocumen
 import hashlib
 import re
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 
 from django.core.cache import cache as _cache
+from django.utils import timezone as djtz
 
 from . import company_loader, nextcloud
 from .models import (
@@ -74,7 +75,8 @@ def _format_lastmod(ts):
     if not ts:
         return ""
     try:
-        dt = datetime.fromtimestamp(ts)
+        # ts es epoch (UTC); se muestra en la zona local activa (cookie del navegador).
+        dt = djtz.localtime(datetime.fromtimestamp(ts, tz=dt_timezone.utc))
         return f"{dt.day:02d} {_MESES_ES[dt.month - 1]} {dt.year}"
     except (ValueError, TypeError, OSError, IndexError):
         return ""
@@ -83,6 +85,8 @@ def _format_lastmod(ts):
 def _format_fecha(dt):
     if not dt:
         return ""
+    if djtz.is_aware(dt):
+        dt = djtz.localtime(dt)
     return f"{dt.day:02d} {_MESES_ES[dt.month - 1]} {dt.year}"
 
 
