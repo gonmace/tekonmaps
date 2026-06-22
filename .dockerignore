@@ -3,6 +3,7 @@ db/
 *.sqlite3
 .env
 .env.*
+.cache/
 
 # Python
 __pycache__/
