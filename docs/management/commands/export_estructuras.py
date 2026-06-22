@@ -36,6 +36,7 @@ class Command(BaseCommand):
                 "codigo": d.codigo,
                 "tipo_esperado": d.tipo_esperado,
                 "obligatorio": d.obligatorio,
+                "galeria": d.galeria,
                 "orden": d.orden,
                 "activo": d.activo,
             }

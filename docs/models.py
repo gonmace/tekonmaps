@@ -279,6 +279,10 @@ class DocumentoEsperado(models.Model):
         max_length=8, blank=True, choices=TIPO_CHOICES,
         help_text="Tipo de archivo esperado. 'Presente' = hay ≥1 de este tipo. Vacío = cualquiera.")
     obligatorio = models.BooleanField(default=True)
+    galeria = models.BooleanField(
+        default=False,
+        help_text="Mostrar los archivos como mosaico de fotos (modal grande). Para "
+                  "documentos tipo registro fotográfico.")
     orden = models.PositiveIntegerField(default=0)
     activo = models.BooleanField(default=True)
 

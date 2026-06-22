@@ -192,6 +192,7 @@ def _doc_dict(d, estado, fecha, archivos, roles, necesario=True, obs=None):
         "id": d.id, "etapa": d.etapa, "etapa_display": d.get_etapa_display(),
         "carpeta": d.carpeta, "nombre": d.nombre, "codigo": d.codigo, "orden": d.orden,
         "tipo_esperado": d.tipo_esperado, "necesario": necesario,
+        "galeria": d.galeria,
         "roles": roles, "estado": estado, "fecha": fecha, "archivos": archivos,
         "observaciones": observaciones,
         "tiene_warning": any(not o["obs_enmendada"] for o in observaciones),

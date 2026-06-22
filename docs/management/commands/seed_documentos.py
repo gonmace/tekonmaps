@@ -29,6 +29,7 @@ class Command(BaseCommand):
                 "codigo": row.get("codigo", ""),
                 "tipo_esperado": row.get("tipo_esperado", ""),
                 "obligatorio": row.get("obligatorio", True),
+                "galeria": row.get("galeria", False),
                 "orden": row.get("orden", 0),
                 "activo": row.get("activo", True),
             }

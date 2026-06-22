@@ -74,6 +74,18 @@
     <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
   </dialog>
 
+  <dialog id="modal-galeria" class="modal">
+    <div class="modal-box max-w-5xl w-11/12">
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <h3 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-images text-info"></i> <span id="galeria-title">Galería</span></h3>
+        <form method="dialog"><button class="btn btn-ghost btn-sm btn-circle"><i class="fa-solid fa-xmark"></i></button></form>
+      </div>
+      <div id="galeria-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
+      <p id="galeria-vacio" class="hidden text-center text-base-content/50 py-8">Sin fotos.</p>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+
   <div class="flex flex-wrap items-end gap-3 mb-8">
     <div class="form-control w-full sm:w-auto">
       <span class="label-text font-medium">Empresa</span>
@@ -454,6 +466,21 @@
     return `<button type="button" class="js-ver btn btn-view btn-xs gap-1" data-target="files-${d.id}"><i class="fa-solid fa-eye"></i> ver</button>`;
   }
 
+  // Archivos de imagen del documento (para la galería de fotos).
+  const EXT_IMAGEN = ['JPG', 'JPEG', 'PNG', 'GIF', 'WEBP', 'BMP'];
+  function imagenesDe(d) {
+    return (d.archivos || []).filter(x => !x.pendiente_eliminar && EXT_IMAGEN.includes(extDe(x.nombre)));
+  }
+
+  // Botón "galería": solo en documentos marcados como galería (registro fotográfico)
+  // que tengan al menos una imagen. Abre un modal grande con el mosaico de fotos.
+  function galeriaBtn(d) {
+    if (!d.galeria) return '';
+    const n = imagenesDe(d).length;
+    if (!n) return '';
+    return `<button type="button" class="js-galeria btn btn-view btn-xs gap-1" data-doc="${d.id}" title="Ver galería de fotos"><i class="fa-solid fa-images"></i> galería (${n})</button>`;
+  }
+
   // Lista desplegable de archivos (debajo), con descarga y borrado en dos pasos.
   function verDropdown(d) {
     const a = d.archivos || [];
@@ -514,7 +541,7 @@
       </div>
       <div></div>
       <div class="flex flex-col items-center gap-0.5 min-w-0">
-        <div class="flex items-center gap-2">${badgesArchivos(d)}${verBtn(d)}${obsBtn(d)}</div>
+        <div class="flex items-center gap-2">${badgesArchivos(d)}${verBtn(d)}${galeriaBtn(d)}${obsBtn(d)}</div>
         ${verDropdown(d)}
         ${obsDropdown(d)}
       </div>
@@ -1010,6 +1037,8 @@
     if (subir) { abrirModalSubir(subir.dataset.doc, subir.dataset.nombre); return; }
     const ver = ev.target.closest('.js-ver');
     if (ver) { document.getElementById(ver.dataset.target).classList.toggle('hidden'); return; }
+    const galeria = ev.target.closest('.js-galeria');
+    if (galeria) { abrirGaleria(galeria.dataset.doc); return; }
     const verObs = ev.target.closest('.js-ver-obs');
     if (verObs) { document.getElementById(verObs.dataset.target).classList.toggle('hidden'); return; }
     const enm = ev.target.closest('.js-enmendar');
@@ -1029,6 +1058,28 @@
     const editar = ev.target.closest('.js-editar');
     if (editar) { abrirModalEditar(editar.dataset.doc); return; }
   });
+
+  // ── Galería de fotos (mosaico → modal grande) ─────────────────────────────
+  const modalGaleria = document.getElementById('modal-galeria');
+  const galeriaGrid = document.getElementById('modal-galeria').querySelector('#galeria-grid');
+  const galeriaVacio = document.getElementById('galeria-vacio');
+
+  function abrirGaleria(docId) {
+    const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(docId));
+    if (!doc) return;
+    const imgs = imagenesDe(doc);
+    document.getElementById('galeria-title').textContent = `${doc.nombre} · ${imgs.length} foto${imgs.length === 1 ? '' : 's'}`;
+    galeriaGrid.innerHTML = imgs.map(x => {
+      const url = `${ARCHIVO_URL}?path=${encodeURIComponent(x.path)}`;
+      return `<a href="${url}" target="_blank" rel="noopener" class="block group relative overflow-hidden rounded-lg bg-base-200 aspect-square" title="${escapeHtml(x.nombre)}">
+        <img src="${url}" alt="${escapeHtml(x.nombre)}" loading="lazy"
+             class="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105">
+        <span class="absolute inset-x-0 bottom-0 px-2 py-1 text-[10px] text-white bg-black/50 truncate opacity-0 group-hover:opacity-100 transition-opacity">${ORIGEN_ICONO[x.origen] || ''} ${escapeHtml(x.nombre)}</span>
+      </a>`;
+    }).join('');
+    galeriaVacio.classList.toggle('hidden', imgs.length > 0);
+    modalGaleria.showModal();
+  }
 
   // ── Editar documento en modal (solo superuser) ────────────────────────────
   const modalEditar = document.getElementById('modal-editar');

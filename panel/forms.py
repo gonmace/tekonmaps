@@ -60,7 +60,7 @@ class DocumentoEsperadoForm(StyledFormMixin, forms.ModelForm):
         fields = ['etapa', 'carpeta', 'nombre', 'codigo', 'tipo_esperado',
                   'rol_buscador', 'rol_tk_redline', 'rol_constructor',
                   'rol_ito', 'rol_ito_hse', 'rol_esp_electrico', 'rol_coordinador',
-                  'obligatorio', 'orden', 'activo']
+                  'obligatorio', 'galeria', 'orden', 'activo']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
