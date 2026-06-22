@@ -12,7 +12,7 @@
   <div class="overflow-x-auto">
     <table class="table">
       <thead>
-        <tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último ingreso</th><th>Acceso a secciones</th><th class="text-right">Acciones</th></tr>
+        <tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último ingreso</th><th>Acceso a secciones</th><th>Sitios</th><th class="text-right">Acciones</th></tr>
       </thead>
       <tbody>
         {% for row in usuarios %}
@@ -68,6 +68,17 @@
             </div>
             {% endif %}
           </td>
+          <td>
+            {% if row.ve_todo %}
+            <span class="badge badge-sm badge-success badge-outline">Todos</span>
+            {% elif row.sitios %}
+            <div class="flex flex-wrap gap-1 max-w-xs">
+              {% for s in row.sitios %}<span class="badge badge-sm badge-info badge-outline whitespace-nowrap">{{ s }}</span>{% endfor %}
+            </div>
+            {% else %}
+            <span class="text-xs text-base-content/40">Sin acceso</span>
+            {% endif %}
+          </td>
           <td class="text-right whitespace-nowrap">
             {% if not row.u.is_superuser %}
             <a href="{% url 'panel:usuario_sitios' row.u.pk %}" class="btn btn-ghost btn-xs">Sitios</a>
@@ -82,7 +93,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center text-base-content/50 py-6">Sin usuarios.</td></tr>
+        <tr><td colspan="7" class="text-center text-base-content/50 py-6">Sin usuarios.</td></tr>
         {% endfor %}
       </tbody>
     </table>

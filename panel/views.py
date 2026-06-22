@@ -398,7 +398,7 @@ def estructura_asignar(request):
 @superuser_required
 def usuarios(request):
     rows = []
-    for u in User.objects.all().order_by('email', 'username'):
+    for u in User.objects.all().order_by('email', 'username').prefetch_related('sitios_permitidos'):
         profile = getattr(u, 'profile', None)
         rows.append({
             'u': u,
@@ -407,6 +407,9 @@ def usuarios(request):
             'acceso_contratista': getattr(profile, 'acceso_contratista', False),
             'acceso_finales': getattr(profile, 'acceso_finales', False),
             'acceso_seguimiento': getattr(profile, 'acceso_seguimiento', False),
+            # Sitios asignados (vacío si ve todo). Coordinador/TK Redline y superusuario ven todo.
+            've_todo': u.is_superuser or bool(profile and profile.rol in ROLES_TODO_SITIO),
+            'sitios': sorted(f"{a.empresa} / {a.sitio}" for a in u.sitios_permitidos.all()),
         })
     return render(request, 'panel/usuarios.html', {
         'titulo_pagina': 'Panel · Usuarios',
