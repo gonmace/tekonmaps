@@ -15,6 +15,7 @@ from docs.models import (
     EstructuraCache,
     PlantillaEstructura,
     ProyectoFinalCache,
+    ROLES_TODO_SITIO,
     SeguimientoCache,
     SiteConfig,
     SitioCache,
@@ -543,6 +544,8 @@ def accesos(request):
             'u': u,
             'rol': profile.get_rol_display() if profile else '—',
             'n_sitios': u.sitios_permitidos.count(),
+            # Coordinador / TK Redline ven todos los sitios; no requieren asignación.
+            've_todo': bool(profile and profile.rol in ROLES_TODO_SITIO),
         })
     return render(request, 'panel/accesos.html', {
         'titulo_pagina': 'Panel · Accesos',
@@ -560,10 +563,12 @@ def usuario_sitios(request, pk):
     asignados = {}
     for a in u.sitios_permitidos.all():
         asignados.setdefault(a.empresa, []).append(a.sitio)
+    profile = getattr(u, 'profile', None)
     return render(request, 'panel/accesos_usuario.html', {
         'titulo_pagina': 'Panel · Accesos',
         'seccion': 'accesos',
         'u': u,
+        've_todo': bool(profile and profile.rol in ROLES_TODO_SITIO),
         'empresas': company_loader.get_all(),
         'asignados_json': json.dumps(asignados),
         'api_sitios_url': reverse('docs:api_sitios'),

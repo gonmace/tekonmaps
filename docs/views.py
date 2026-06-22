@@ -204,13 +204,20 @@ def _es_admin(user):
     return user.is_superuser or _get_user_rol(user) != "visitante"
 
 
+def _ve_todos_los_sitios(user):
+    """True si el usuario ve TODOS los sitios sin necesidad de ``AccesoSitio``: el
+    superusuario o un rol transversal (Coordinador / TK Redline, ver ``ROLES_TODO_SITIO``)."""
+    from .models import ROLES_TODO_SITIO
+    return user.is_superuser or _get_user_rol(user) in ROLES_TODO_SITIO
+
+
 def _sitios_permitidos(user, empresa):
     """Sitios a los que el usuario puede acceder en una empresa.
 
-    None = sin restricción (superusuario). set() = ninguno. Restrictivo:
+    None = sin restricción (superusuario o rol transversal). set() = ninguno. Restrictivo:
     un usuario sin asignaciones no ve ningún sitio.
     """
-    if user.is_superuser:
+    if _ve_todos_los_sitios(user):
         return None
     from .models import AccesoSitio
     return set(AccesoSitio.objects.filter(user=user, empresa=empresa)
@@ -231,8 +238,9 @@ def _denegar_sitio(user, empresa, sitio):
 
 
 def _empresas_permitidas(user):
-    """Empresas con al menos un sitio asignado. None = sin restricción (superusuario)."""
-    if user.is_superuser:
+    """Empresas con al menos un sitio asignado. None = sin restricción (superusuario o
+    rol transversal)."""
+    if _ve_todos_los_sitios(user):
         return None
     from .models import AccesoSitio
     return set(AccesoSitio.objects.filter(user=user)

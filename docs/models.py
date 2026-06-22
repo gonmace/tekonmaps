@@ -81,6 +81,10 @@ ROL_COLORES = {
 # auto-confirma al subir el archivo, según el rol del usuario.
 ACCIONES_REVISION = {"REVISAR", "FIRMAR"}
 
+# Roles transversales con acceso a TODOS los sitios sin necesidad de AccesoSitio
+# (como el superusuario). No hace falta asignarles sitios en el Panel.
+ROLES_TODO_SITIO = ("rol_coordinador", "rol_tk_redline")
+
 
 class UserProfile(models.Model):
     # Rol único consolidado: 'visitante' (solo lectura) o una de las funciones ITO

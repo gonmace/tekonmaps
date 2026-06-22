@@ -526,3 +526,27 @@ class OcultarFotosTests(TestCase):
                        {"empresa": "AJ", "sitio": "OTRO", "paths": ["/20 AJ/OTRO/a.jpg"]})
         self.assertEqual(r.status_code, 403)
         self.assertFalse(ArchivoOculto.objects.exists())
+
+
+class AccesoTodoSitioTests(TestCase):
+    """Coordinador y TK Redline ven todos los sitios sin AccesoSitio (como el superusuario)."""
+
+    def _user(self, username, rol):
+        u = User.objects.create_user(username, password="x")
+        UserProfile.objects.create(user=u, rol=rol)
+        return u
+
+    def test_roles_transversales_sin_restriccion(self):
+        from docs.views import _sitios_permitidos, _empresas_permitidas, _denegar_sitio
+        for rol in ("rol_coordinador", "rol_tk_redline"):
+            u = self._user(f"u_{rol}", rol)
+            # Sin ninguna AccesoSitio: igualmente ve todo (None = sin restricción).
+            self.assertIsNone(_sitios_permitidos(u, "AJ"), rol)
+            self.assertIsNone(_empresas_permitidas(u), rol)
+            self.assertIsNone(_denegar_sitio(u, "AJ", "CUALQUIER-SITIO"), rol)
+
+    def test_rol_normal_sigue_restringido(self):
+        from docs.views import _sitios_permitidos, _denegar_sitio
+        u = self._user("u_ito", "rol_ito")
+        self.assertEqual(_sitios_permitidos(u, "AJ"), set())
+        self.assertIsNotNone(_denegar_sitio(u, "AJ", "S1"))  # 403: sin AccesoSitio

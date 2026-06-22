@@ -8,7 +8,8 @@
 </div>
 <p class="text-sm text-base-content/60 mb-4">
   Cada usuario solo puede ver los sitios que tenga asignados. Sin asignaciones no ve ningún sitio.
-  El superusuario ve todo y no aparece en esta lista.
+  El superusuario ve todo y no aparece en esta lista. Los roles <strong>Coordinador</strong> y
+  <strong>TK Redline</strong> ven todos los sitios automáticamente, así que no requieren asignación.
 </p>
 
 <div class="card bg-base-100 border border-base-300 shadow-xs">
@@ -26,14 +27,20 @@
           </td>
           <td>{{ row.rol }}</td>
           <td>
-            {% if row.n_sitios %}
+            {% if row.ve_todo %}
+            <span class="badge badge-sm badge-success badge-outline">Todos los sitios</span>
+            {% elif row.n_sitios %}
             <span class="badge badge-sm badge-info badge-outline">{{ row.n_sitios }} sitio{{ row.n_sitios|pluralize }}</span>
             {% else %}
             <span class="badge badge-sm badge-neutral badge-outline">Sin acceso</span>
             {% endif %}
           </td>
           <td class="text-right whitespace-nowrap">
+            {% if row.ve_todo %}
+            <span class="text-xs text-base-content/40">No requiere asignación</span>
+            {% else %}
             <a href="{% url 'panel:usuario_sitios' row.u.pk %}" class="btn btn-edit btn-xs">Asignar sitios</a>
+            {% endif %}
           </td>
         </tr>
         {% empty %}

@@ -11,6 +11,13 @@
   <a href="{% url 'panel:accesos' %}" class="btn btn-ghost btn-sm">Volver</a>
 </div>
 
+{% if ve_todo %}
+<div class="alert alert-success">
+  <i class="fa-solid fa-circle-check"></i>
+  <span>Este usuario tiene un rol transversal (<strong>Coordinador</strong> o <strong>TK Redline</strong>)
+    y ve <strong>todos los sitios</strong> automáticamente. No es necesario asignarle sitios.</span>
+</div>
+{% else %}
 <div class="card bg-base-100 border border-base-300 shadow-xs">
   <div class="card-body gap-4">
     <div class="form-control w-full max-w-xs">
@@ -35,9 +42,11 @@
     <div id="sitios-msg" class="text-sm text-base-content/60"></div>
   </div>
 </div>
+{% endif %}
 
 <script>
 (function () {
+  if (!document.getElementById('empresa-sel')) return;  // rol transversal: sin selector
   var API = "{{ api_sitios_url }}";
   var ASIGNADOS = {{ asignados_json|safe }};
   var sel = document.getElementById('empresa-sel');
