@@ -30,6 +30,9 @@ chmod -R o+rX /app/staticfiles
 echo 'Ejecutando migraciones...'
 python manage.py migrate
 
+echo 'Sembrando estructura del ITO desde JSON...'
+python manage.py seed_documentos
+
 echo 'Iniciando Gunicorn...'
 exec gunicorn core.wsgi:application \
     --bind 0.0.0.0:8000 \

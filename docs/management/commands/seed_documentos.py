@@ -27,7 +27,10 @@ class Command(BaseCommand):
             defaults = {
                 "carpeta": row.get("carpeta", ""),
                 "codigo": row.get("codigo", ""),
+                "tipo_esperado": row.get("tipo_esperado", ""),
+                "obligatorio": row.get("obligatorio", True),
                 "orden": row.get("orden", 0),
+                "activo": row.get("activo", True),
             }
             for r in self.ROLES:
                 defaults[r] = row.get(r, "")
