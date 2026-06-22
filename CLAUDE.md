@@ -188,6 +188,7 @@ CSS: `cd theme/static_src && npm run build` (o `npm run start` para watch). Sali
 
 ## Convenciones
 - Código, comentarios y UI en español.
-- `db.sqlite3` está versionado (default tanto en dev como en prod).
+- `db.sqlite3` **no** se versiona (está en `.gitignore`); cada entorno tiene el suyo. Respaldo/
+  restauración con `./backup-db.sh` / `./restore-db.sh`.
 - `Readme.md` aún describe el flujo previo (split settings, `requirements/`); la fuente de verdad
   para comandos es este archivo y el `Makefile`.
