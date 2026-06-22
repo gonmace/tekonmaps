@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/seguimiento/ocultar/', views.ocultar_archivo, name='ocultar_archivo'),
     path('api/seguimiento/restaurar/', views.restaurar_archivo, name='restaurar_archivo'),
     path('api/seguimiento/asignar/', views.asignar_archivo, name='asignar_archivo'),
+    path('api/seguimiento/desasignar/', views.desasignar_archivo, name='desasignar_archivo'),
     path('api/seguimiento/necesario/', views.marcar_necesario, name='marcar_necesario'),
     path('template/<int:pk>/', views.descargar_template, name='descargar_template'),
     path('api/sitios/', views.api_sitios, name='api_sitios'),

@@ -250,6 +250,7 @@
   const OCULTAR_URL = "{% url 'docs:ocultar_archivo' %}";
   const RESTAURAR_URL = "{% url 'docs:restaurar_archivo' %}";
   const ASIGNAR_URL = "{% url 'docs:asignar_archivo' %}";
+  const DESASIGNAR_URL = "{% url 'docs:desasignar_archivo' %}";
   const API_CARPETAS20 = "{% url 'docs:api_carpetas20' %}";
   const REFRESH_CARPETA_URL = "{% url 'docs:refrescar_carpeta' %}";
   const ACTUALIZAR_ESTRUCTURA_URL = "{% url 'docs:actualizar_estructura' %}";
@@ -538,11 +539,16 @@
       } else if (ES_ADMIN) {
         acc = `<button type="button" class="js-del text-delete hover:opacity-70 shrink-0" ${datos} title="Marcar para borrado"><i class="fa-solid fa-trash-can text-xs"></i></button>`;
       }
+      // Desasignar: solo en archivos asignados a mano (el inverso de "Asignar a…").
+      const desasig = (ES_ADMIN && x.asignado && !x.pendiente_eliminar)
+        ? `<button type="button" class="js-desasignar text-base-content/50 hover:text-warning shrink-0" ${datos} title="Quitar asignación manual"><i class="fa-solid fa-link-slash text-xs"></i></button>`
+        : '';
       const nameCls = x.pendiente_eliminar ? 'line-through text-base-content/40' : 'link link-info';
+      const asigMark = x.asignado ? ' <i class="fa-solid fa-link text-[10px] text-base-content/30" title="Asignado manualmente"></i>' : '';
       const tipArchivo = `${escapeHtml(x.path)}\n${x.origen === 'constructor' ? 'Archivo Constructora' : 'Cargado TKR'}`;
       return `<div class="flex items-center gap-2">
-        <a href="${ARCHIVO_URL}?path=${encodeURIComponent(x.path)}" target="_blank" class="text-xs ${nameCls} whitespace-nowrap" title="${tipArchivo}">${ORIGEN_ICONO[x.origen] || ''} ${escapeHtml(x.nombre)}</a>
-        ${acc}
+        <a href="${ARCHIVO_URL}?path=${encodeURIComponent(x.path)}" target="_blank" class="text-xs ${nameCls} whitespace-nowrap" title="${tipArchivo}">${ORIGEN_ICONO[x.origen] || ''} ${escapeHtml(x.nombre)}</a>${asigMark}
+        ${desasig}${acc}
       </div>`;
     }).join('');
     return `<div id="files-${d.id}" class="hidden mt-1 text-left space-y-0.5 w-full">${links}</div>`;
@@ -1094,6 +1100,8 @@
     if (borrarObsEl) { borrarObs(borrarObsEl.dataset.doc, borrarObsEl.dataset.rol); return; }
     const del = ev.target.closest('.js-del');
     if (del) { marcarEliminacion(del.dataset.path, del.dataset.nombre); return; }
+    const desasig = ev.target.closest('.js-desasignar');
+    if (desasig) { desasignarArchivo(desasig.dataset.path, desasig.dataset.nombre); return; }
     const elimOk = ev.target.closest('.js-elim-ok');
     if (elimOk) { aceptarEliminacion(elimOk.dataset.path, elimOk.dataset.nombre); return; }
     const elimNo = ev.target.closest('.js-elim-no');
@@ -1460,6 +1468,15 @@
 
   function rechazarEliminacion(path) {
     _postElim(RECHAZAR_ELIM_URL, path, 'Borrado rechazado', 'No se pudo rechazar');
+  }
+
+  // Quita la asignación manual de un archivo (vuelve a inesperado o a reconocerse por nombre).
+  function desasignarArchivo(path, nombre) {
+    const hacer = () => _postElim(DESASIGNAR_URL, path, 'Asignación quitada', 'No se pudo desasignar');
+    if (window.Alert && window.Alert.confirm) {
+      window.Alert.confirm(`¿Quitar la asignación de “${nombre}”? El archivo volverá a inesperados (o se reconocerá por nombre).`,
+        hacer, null, { confirmText: 'Desasignar', confirmClass: 'btn-warning', type: 'warning' });
+    } else { hacer(); }
   }
 
   empresaSel.addEventListener('change', () => {

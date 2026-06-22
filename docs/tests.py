@@ -477,6 +477,16 @@ class RevisionYBorradoTests(TestCase):
         self.assertEqual(r.status_code, 403)
         deleted.assert_not_called()
 
+    def test_desasignar_quita_la_asignacion(self):
+        from docs.models import AsignacionArchivo
+        self.client.force_login(self.ito)
+        AsignacionArchivo.objects.create(
+            empresa="AJ", sitio="S1", path="/20 AJ/S1/f.pdf", documento=self.doc)
+        r = self._post("docs:desasignar_archivo",
+                       {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf"})
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(AsignacionArchivo.objects.filter(path="/20 AJ/S1/f.pdf").exists())
+
 
 class OcultarFotosTests(TestCase):
     """Soft-delete reversible de fotos en una galería (ArchivoOculto): nunca toca Nextcloud."""

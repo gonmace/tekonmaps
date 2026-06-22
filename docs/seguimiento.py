@@ -476,7 +476,7 @@ def _ensamblar_datos(empresa, sitio, archivos, ito_base):
             d, "presente" if presente else "falta", _format_lastmod(fecha_ts),
             [{"nombre": a["nombre"], "fecha": a["fecha"], "path": a["path"],
               "origen": a["origen"], "pendiente_eliminar": a["path"] in pendientes,
-              "oculto": a["path"] in ocultos}
+              "oculto": a["path"] in ocultos, "asignado": a["path"] in asig_manual}
              for a in asig],
             _roles(d, conf_map.get(d.id, {}), obs_map.get(d.id, {})), necesario=necesario,
             obs=obs_map.get(d.id, {}),

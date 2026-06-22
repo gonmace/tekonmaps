@@ -715,6 +715,24 @@ def asignar_archivo(request):
     return JsonResponse({"ok": True, "doc_id": doc.id})
 
 
+@login_required
+def desasignar_archivo(request):
+    """POST JSON (solo administrador): quita la asignación manual de un archivo (el inverso de
+    ``asignar_archivo``). El archivo vuelve a reconocerse por nombre o a quedar como inesperado.
+    Body: {empresa, sitio, path}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    parsed = _parse_eliminacion(request)
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    empresa, sitio, path = parsed
+    AsignacionArchivo.objects.filter(empresa=empresa, sitio=sitio, path=path).delete()
+    seguimiento.invalidar_datos(empresa, sitio)
+    return JsonResponse({"ok": True})
+
+
 def _parse_eliminacion(request):
     """Valida el body común de las vistas de eliminación. Devuelve (empresa, sitio, path) o
     una ``JsonResponse`` de error."""
