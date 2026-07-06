@@ -734,6 +734,36 @@ def desasignar_archivo(request):
     return JsonResponse({"ok": True})
 
 
+@login_required
+def renombrar_archivo(request):
+    """POST JSON (administrador): renombra un archivo en Nextcloud dentro de su misma
+    carpeta (típicamente al nombre que dicta la plantilla del documento). Las marcas de BD
+    que apuntan al path (asignación, borrado pendiente, oculto) siguen al archivo.
+    Body: {empresa, sitio, path, nombre}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    parsed = _parse_eliminacion(request)
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    empresa, sitio, path = parsed
+    try:
+        nombre = (json.loads(request.body or "{}").get("nombre") or "").strip()
+    except ValueError:
+        nombre = ""
+    if not nombre:
+        return JsonResponse({"error": "Falta el nombre nuevo."}, status=400)
+    try:
+        destino = seguimiento.renombrar_archivo(empresa, sitio, path, nombre)
+    except nextcloud.DestinoExiste as e:
+        return JsonResponse({"error": str(e)}, status=409)
+    except Exception as e:
+        return JsonResponse({"error": f"No se pudo renombrar: {e}"}, status=500)
+    return JsonResponse({"ok": True, "path": destino,
+                         "nombre": destino.rsplit("/", 1)[-1]})
+
+
 def _parse_eliminacion(request):
     """Valida el body común de las vistas de eliminación. Devuelve (empresa, sitio, path) o
     una ``JsonResponse`` de error."""

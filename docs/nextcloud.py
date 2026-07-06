@@ -4,10 +4,11 @@ Lee la configuración de ``settings`` (NEXTCLOUD_BASE_URL / NEXTCLOUD_USER /
 NEXTCLOUD_APP_PASSWORD), que provienen de ``.env`` vía python-decouple.
 
 Operaciones soportadas:
-  - Lectura: PROPFIND → ``list_folder``, ``list_files``, ``tree``, ``folder_lastmod``.
-  - Escritura controlada: ``mkcol`` / ``ensure_tree`` (solo crean carpetas, p. ej. la
-    estructura de seguimiento). Nunca se hace PUT/DELETE/MOVE: el cliente no modifica
-    ni borra archivos existentes.
+  - Lectura: PROPFIND → ``list_folder``, ``list_files``, ``tree``, ``folder_lastmod``;
+    GET → ``download``.
+  - Escritura controlada: ``mkcol`` / ``ensure_tree`` (crear carpetas), ``upload`` (PUT,
+    subidas del área ITO), ``delete`` (DELETE, solo tras aceptar una eliminación pendiente)
+    y ``move`` (MOVE sin sobrescribir, para renombrar según la plantilla).
 
 Las rutas (``path``) son relativas a la raíz de archivos del usuario, p. ej.
 ``"/20 AJ/Sitio 1"``. Cada segmento se codifica para URL automáticamente.
@@ -221,6 +222,25 @@ def delete(path):
     """Elimina un archivo (WebDAV DELETE). Devuelve el código HTTP (204 ok · 404 no existía)."""
     resp = requests.request("DELETE", _url(path), auth=_auth(), timeout=60)
     if resp.status_code in (204, 200, 404):
+        return resp.status_code
+    resp.raise_for_status()
+    return resp.status_code
+
+
+class DestinoExiste(RuntimeError):
+    """El destino de un MOVE ya existe (WebDAV 412 con Overwrite: F)."""
+
+
+def move(src, dst):
+    """Mueve/renombra un archivo (WebDAV MOVE) sin sobrescribir: si ``dst`` ya
+    existe lanza :class:`DestinoExiste`. Devuelve el código HTTP (201 · 204)."""
+    resp = requests.request(
+        "MOVE", _url(src), auth=_auth(),
+        headers={"Destination": _url(dst), "Overwrite": "F"}, timeout=60,
+    )
+    if resp.status_code == 412:
+        raise DestinoExiste(f"Ya existe un archivo llamado «{dst.rsplit('/', 1)[-1]}».")
+    if resp.status_code in (201, 204):
         return resp.status_code
     resp.raise_for_status()
     return resp.status_code

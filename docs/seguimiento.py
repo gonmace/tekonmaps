@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone as dt_timezone
 
 from django.core.cache import cache as _cache
+from django.db import IntegrityError, transaction
 from django.utils import timezone as djtz
 
 from . import company_loader, nextcloud
@@ -690,6 +691,29 @@ def nombre_sugerido(doc, sitio, filename):
     ext = "." + filename.rsplit(".", 1)[1] if "." in filename else ""
     base = doc.codigo.replace("CL-XX-0000", code) if code else doc.codigo
     return f"{base}{ext}"
+
+
+def renombrar_archivo(empresa, sitio, path, nuevo_nombre):
+    """Renombra un archivo **en su misma carpeta** de Nextcloud (típicamente al nombre que
+    dicta la plantilla) y re-apunta los registros de BD que lo referencian por ``path``
+    (asignación manual, eliminación pendiente, archivo oculto), para que el archivo conserve
+    su documento y sus marcas. No toca confirmaciones ni observaciones (el contenido no
+    cambió). Devuelve la ruta nueva. Lanza :class:`nextcloud.DestinoExiste` si ya hay un
+    archivo con ese nombre."""
+    nombre = _sanitize_archivo(nuevo_nombre)
+    carpeta = path.rsplit("/", 1)[0]
+    destino = f"{carpeta}/{nombre}"
+    if destino == path:
+        return path
+    nextcloud.move(path, destino)
+    for model in (AsignacionArchivo, EliminacionPendiente, ArchivoOculto):
+        try:
+            with transaction.atomic():
+                model.objects.filter(empresa=empresa, sitio=sitio, path=path).update(path=destino)
+        except IntegrityError:  # ya había una fila para el destino → basta quitar la vieja
+            model.objects.filter(empresa=empresa, sitio=sitio, path=path).delete()
+    invalidar_cache(empresa, sitio)
+    return destino
 
 
 def limpiar_autoconfirmaciones(empresa, sitio, path):

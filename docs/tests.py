@@ -487,6 +487,64 @@ class RevisionYBorradoTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertFalse(AsignacionArchivo.objects.filter(path="/20 AJ/S1/f.pdf").exists())
 
+    def test_renombrar_mueve_y_reapunta_registros(self):
+        """Renombrar hace MOVE en Nextcloud y los registros por path (asignación,
+        eliminación pendiente) siguen al archivo con su ruta nueva."""
+        from docs.models import AsignacionArchivo
+        self.client.force_login(self.ito)
+        viejo, nuevo = "/20 AJ/S1/borrador final v3.pdf", "/20 AJ/S1/PTI-CL-AA-0001.pdf"
+        AsignacionArchivo.objects.create(empresa="AJ", sitio="S1", path=viejo, documento=self.doc)
+        EliminacionPendiente.objects.create(empresa="AJ", sitio="S1", path=viejo)
+        with mock.patch.object(nextcloud, "move", return_value=201) as moved:
+            r = self._post("docs:renombrar_archivo",
+                           {"empresa": "AJ", "sitio": "S1", "path": viejo,
+                            "nombre": "PTI-CL-AA-0001.pdf"})
+        self.assertEqual(r.status_code, 200)
+        moved.assert_called_once_with(viejo, nuevo)
+        self.assertEqual(r.json()["path"], nuevo)
+        self.assertTrue(AsignacionArchivo.objects.filter(path=nuevo, documento=self.doc).exists())
+        self.assertFalse(AsignacionArchivo.objects.filter(path=viejo).exists())
+        self.assertTrue(EliminacionPendiente.objects.filter(path=nuevo).exists())
+
+    def test_renombrar_sanea_el_nombre_y_no_sale_de_la_carpeta(self):
+        """Barras y '..' en el nombre se sanean: el destino queda en la misma carpeta."""
+        self.client.force_login(self.ito)
+        with mock.patch.object(nextcloud, "move", return_value=201) as moved:
+            r = self._post("docs:renombrar_archivo",
+                           {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf",
+                            "nombre": "../../otro/x.pdf"})
+        self.assertEqual(r.status_code, 200)
+        destino = moved.call_args.args[1]
+        self.assertTrue(destino.startswith("/20 AJ/S1/"))
+        # Sin barras en el nombre final: no puede salir de la carpeta.
+        self.assertNotIn("/", destino[len("/20 AJ/S1/"):])
+
+    def test_renombrar_destino_existente_da_409(self):
+        self.client.force_login(self.ito)
+        with mock.patch.object(nextcloud, "move",
+                               side_effect=nextcloud.DestinoExiste("Ya existe.")):
+            r = self._post("docs:renombrar_archivo",
+                           {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf",
+                            "nombre": "f2.pdf"})
+        self.assertEqual(r.status_code, 409)
+
+    def test_renombrar_requiere_rol_y_acceso_al_sitio(self):
+        vis = User.objects.create_user("vis2", password="x")
+        UserProfile.objects.create(user=vis, rol="visitante")
+        self.client.force_login(vis)
+        with mock.patch.object(nextcloud, "move") as moved:
+            r = self._post("docs:renombrar_archivo",
+                           {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf",
+                            "nombre": "f2.pdf"})
+        self.assertEqual(r.status_code, 403)
+        self.client.force_login(self.ito)  # con rol, pero sin AccesoSitio a "OTRO"
+        with mock.patch.object(nextcloud, "move") as moved:
+            r = self._post("docs:renombrar_archivo",
+                           {"empresa": "AJ", "sitio": "OTRO", "path": "/20 AJ/OTRO/f.pdf",
+                            "nombre": "f2.pdf"})
+        self.assertEqual(r.status_code, 403)
+        moved.assert_not_called()
+
 
 class OcultarFotosTests(TestCase):
     """Soft-delete reversible de fotos en una galería (ArchivoOculto): nunca toca Nextcloud."""

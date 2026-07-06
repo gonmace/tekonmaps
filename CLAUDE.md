@@ -13,8 +13,9 @@ Browser → Django (AJAX) → docs/nextcloud.py (WebDAV PROPFIND/MKCOL) → Next
 ```
 
 Credenciales en `.env`: `NEXTCLOUD_BASE_URL` (`…/remote.php/dav/files/<usuario>/`),
-`NEXTCLOUD_USER`, `NEXTCLOUD_APP_PASSWORD`. El cliente es de solo lectura salvo `mkcol`/`ensure_tree`,
-que solo **crean** carpetas (estructura de seguimiento). La integración previa vía n8n fue retirada.
+`NEXTCLOUD_USER`, `NEXTCLOUD_APP_PASSWORD`. Escrituras acotadas del cliente: `mkcol`/`ensure_tree`
+(crear carpetas), `upload` (subidas del área ITO), `delete` (solo al aceptar una eliminación
+pendiente) y `move` (renombrar sin sobrescribir). La integración previa vía n8n fue retirada.
 
 The infrastructure (settings, Docker, deploy scripts, Makefile) follows the `Dj-Skeleton`
 conventions: a single env-driven `core/settings.py` plus a `make`-based workflow.
@@ -106,6 +107,14 @@ CSS: `cd theme/static_src && npm run build` (o `npm run start` para watch). Sali
   revisor puede marcar **"No conforme"** con una nota (`ObservacionDocumento`, vista `observar`) →
   el documento muestra ⚠. Conforme y observación son excluyentes por (doc, rol); subir un archivo
   corregido limpia confirmaciones **y** observaciones.
+- **Renombrar según plantilla:** en la lista de archivos de un documento (botón "ver" de la
+  columna central), la varita —solo en documentos **con `codigo`**— abre un modal con el
+  nombre que dicta la plantilla
+  (`DocumentoEsperado.codigo` con el código de sitio real y, si trae `(XX00)`, correlativo+fecha
+  — misma sugerencia que el modal de subida), editable. Vista `renombrar_archivo` →
+  `seguimiento.renombrar_archivo` → `nextcloud.move` (MOVE sin sobrescribir, mismo directorio);
+  los registros por path (`AsignacionArchivo`/`EliminacionPendiente`/`ArchivoOculto`) siguen al
+  archivo. No toca confirmaciones/observaciones (el contenido no cambió).
 - **Borrado en dos pasos:** el botón eliminar **marca** el archivo (`EliminacionPendiente`, X
   tachada) vía `eliminar_archivo`; solo Coordinador/superusuario **aceptan** (`aceptar_eliminacion`
   → borra de Nextcloud) o **rechazan** (`rechazar_eliminacion`).

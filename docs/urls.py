@@ -20,6 +20,7 @@ urlpatterns = [
     path('api/seguimiento/eliminar/rechazar/', views.rechazar_eliminacion, name='rechazar_eliminacion'),
     path('api/seguimiento/ocultar/', views.ocultar_archivo, name='ocultar_archivo'),
     path('api/seguimiento/restaurar/', views.restaurar_archivo, name='restaurar_archivo'),
+    path('api/seguimiento/renombrar/', views.renombrar_archivo, name='renombrar_archivo'),
     path('api/seguimiento/asignar/', views.asignar_archivo, name='asignar_archivo'),
     path('api/seguimiento/desasignar/', views.desasignar_archivo, name='desasignar_archivo'),
     path('api/seguimiento/necesario/', views.marcar_necesario, name='marcar_necesario'),

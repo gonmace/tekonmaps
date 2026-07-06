@@ -74,6 +74,29 @@
     <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
   </dialog>
 
+  <dialog id="modal-renombrar" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-wand-magic-sparkles text-info"></i> Renombrar archivo</h3>
+      <p id="ren-actual" class="text-sm text-base-content/60 mt-1 mb-3 break-all"></p>
+      <div id="ren-fecha-row" class="hidden items-center gap-2 mb-3">
+        <label for="ren-fecha" class="text-sm text-base-content/70 flex items-center gap-1">
+          <i class="fa-regular fa-calendar text-info"></i> Fecha
+        </label>
+        <input type="date" id="ren-fecha" class="input input-bordered input-xs">
+        <span class="text-xs text-base-content/40">se añade a la sugerencia como (n-ddmmaa)</span>
+      </div>
+      <div class="flex items-center gap-1">
+        <input type="text" id="ren-nombre" class="input input-bordered input-sm flex-1 min-w-0">
+        <button type="button" id="ren-sugerir" class="btn btn-ghost btn-xs" title="Usar nombre de la plantilla"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
+      </div>
+      <div class="modal-action">
+        <form method="dialog"><button class="btn btn-ghost btn-sm">Cancelar</button></form>
+        <button id="ren-ok" class="btn btn-info btn-sm gap-1"><i class="fa-solid fa-check"></i> Renombrar</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+
   <dialog id="modal-galeria" class="modal">
     <div class="modal-box max-w-none w-[96vw]">
       <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
@@ -250,6 +273,7 @@
   const OCULTAR_URL = "{% url 'docs:ocultar_archivo' %}";
   const RESTAURAR_URL = "{% url 'docs:restaurar_archivo' %}";
   const ASIGNAR_URL = "{% url 'docs:asignar_archivo' %}";
+  const RENOMBRAR_URL = "{% url 'docs:renombrar_archivo' %}";
   const DESASIGNAR_URL = "{% url 'docs:desasignar_archivo' %}";
   const API_CARPETAS20 = "{% url 'docs:api_carpetas20' %}";
   const REFRESH_CARPETA_URL = "{% url 'docs:refrescar_carpeta' %}";
@@ -543,12 +567,17 @@
       const desasig = (ES_ADMIN && x.asignado && !x.pendiente_eliminar)
         ? `<button type="button" class="js-desasignar text-base-content/50 hover:text-warning shrink-0" ${datos} title="Quitar asignación manual"><i class="fa-solid fa-link-slash text-xs"></i></button>`
         : '';
+      // Renombrar según la plantilla (varita, como la sugerencia del modal de subida).
+      // Solo en documentos con código de plantilla: sin él no hay nombre que sugerir.
+      const renom = (ES_ADMIN && !x.pendiente_eliminar && d.codigo)
+        ? `<button type="button" class="js-renombrar text-base-content/50 hover:text-info shrink-0" data-doc="${d.id}" ${datos} title="Renombrar según la plantilla"><i class="fa-solid fa-wand-magic-sparkles text-xs"></i></button>`
+        : '';
       const nameCls = x.pendiente_eliminar ? 'line-through text-base-content/40' : 'link link-info';
       const asigMark = x.asignado ? ' <i class="fa-solid fa-link text-[10px] text-base-content/30" title="Asignado manualmente"></i>' : '';
       const tipArchivo = `${escapeHtml(x.path)}\n${x.origen === 'constructor' ? 'Archivo Constructora' : 'Cargado TKR'}`;
       return `<div class="flex items-center gap-2">
         <a href="${ARCHIVO_URL}?path=${encodeURIComponent(x.path)}" target="_blank" class="text-xs ${nameCls} whitespace-nowrap" title="${tipArchivo}">${ORIGEN_ICONO[x.origen] || ''} ${escapeHtml(x.nombre)}</a>${asigMark}
-        ${desasig}${acc}
+        ${renom}${desasig}${acc}
       </div>`;
     }).join('');
     return `<div id="files-${d.id}" class="hidden mt-1 text-left space-y-0.5 w-full">${links}</div>`;
@@ -940,9 +969,31 @@
     return `${d.getFullYear()}-${_pad2(d.getMonth() + 1)}-${_pad2(d.getDate())}`;
   }
   // Fecha elegida en formato ddmmaa (para el nombre sugerido). '' si no hay fecha.
-  function fechaDDMMAA() {
-    const v = (document.getElementById('subir-fecha').value || '').split('-'); // [yyyy,mm,dd]
+  function fechaDDMMAA(inputId = 'subir-fecha') {
+    const v = (document.getElementById(inputId).value || '').split('-'); // [yyyy,mm,dd]
     return v.length === 3 ? v[2] + v[1] + v[0].slice(2) : '';
+  }
+
+  // Mantiene doc.archivos en orden alfabético tras las mutaciones AJAX (subir/asignar/
+  // renombrar), con el mismo criterio que el backend: nombre en minúsculas.
+  function ordenarArchivos(doc) {
+    (doc.archivos || []).sort((x, y) => {
+      const a = x.nombre.toLowerCase(), b = y.nombre.toLowerCase();
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+  }
+
+  // Nombre según la plantilla: el código del documento con el código de sitio real y,
+  // si trae la secuencia '(XX00)', el correlativo `num` + la fecha ddmmaa (si hay).
+  // Conserva la extensión de `nombreActual`.
+  function nombrePlantilla(codigo, nombreActual, num, fecha) {
+    if (!codigo) return nombreActual;
+    const ext = nombreActual.includes('.') ? '.' + nombreActual.split('.').pop() : '';
+    const m = (CUR_SITIO || '').match(/CL-[A-Za-z]{2}-\d+/);
+    let base = m ? codigo.split('CL-XX-0000').join(m[0]) : codigo;
+    if (base.includes('(XX00)'))
+      base = base.split('(XX00)').join('(' + num + (fecha ? '-' + fecha : '') + ')');
+    return base + ext;
   }
 
   function abrirModalSubir(docId, docNombre) {
@@ -968,21 +1019,12 @@
     renderSubFiles();
   }
 
+  // El correlativo de '(XX00)' sigue a los archivos ya cargados del documento + la
+  // posición en el lote.
   function nombreSugerido(file, i) {
-    if (!_subDocCodigo) return file.name;
-    const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : '';
-    const m = (CUR_SITIO || '').match(/CL-[A-Za-z]{2}-\d+/);
-    let base = m ? _subDocCodigo.split('CL-XX-0000').join(m[0]) : _subDocCodigo;
-    // Placeholder de secuencia '(XX00)' → correlativo + fecha: '(1-ddmmaa)', '(2-ddmmaa)'…
-    // El número sigue a los archivos ya cargados del documento + la posición en el lote.
-    if (base.includes('(XX00)')) {
-      const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(_subDoc));
-      const existentes = doc ? (doc.archivos || []).length : 0;
-      const num = existentes + (i || 0) + 1;
-      const fecha = fechaDDMMAA();
-      base = base.split('(XX00)').join('(' + num + (fecha ? '-' + fecha : '') + ')');
-    }
-    return base + ext;
+    const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(_subDoc));
+    const existentes = doc ? (doc.archivos || []).length : 0;
+    return nombrePlantilla(_subDocCodigo, file.name, existentes + (i || 0) + 1, fechaDDMMAA());
   }
 
   function renderSubFiles() {
@@ -1048,6 +1090,7 @@
           .filter(a => !existentes.has(a.path))
           .map(a => ({ nombre: a.nombre, fecha: '', path: a.path, origen: 'ito' }));
         doc.archivos = (doc.archivos || []).concat(nuevos);
+        ordenarArchivos(doc);
         // Estado de roles tras subir: el backend reinicia las revisiones y auto-confirma
         // el rol del que sube. Usamos el estado que devuelve; si no vino, reinicio local.
         if (data.roles) {
@@ -1102,6 +1145,8 @@
     if (del) { marcarEliminacion(del.dataset.path, del.dataset.nombre); return; }
     const desasig = ev.target.closest('.js-desasignar');
     if (desasig) { desasignarArchivo(desasig.dataset.path, desasig.dataset.nombre); return; }
+    const renom = ev.target.closest('.js-renombrar');
+    if (renom) { abrirModalRenombrar(renom.dataset.doc, renom.dataset.path); return; }
     const elimOk = ev.target.closest('.js-elim-ok');
     if (elimOk) { aceptarEliminacion(elimOk.dataset.path, elimOk.dataset.nombre); return; }
     const elimNo = ev.target.closest('.js-elim-no');
@@ -1415,6 +1460,7 @@
           const doc = (DATOS.documentos || []).find(d => String(d.id) === String(docId));
           if (doc) {
             doc.archivos = (doc.archivos || []).concat([{ nombre: item.nombre, fecha: item.fecha, path: item.path, origen: item.origen }]);
+            ordenarArchivos(doc);
             if (doc.estado === 'falta') {
               doc.estado = 'presente';
               const ag = (DATOS.agregados || {})[doc.etapa];
@@ -1469,6 +1515,67 @@
   function rechazarEliminacion(path) {
     _postElim(RECHAZAR_ELIM_URL, path, 'Borrado rechazado', 'No se pudo rechazar');
   }
+
+  // ── Renombrar un archivo según la plantilla ────────────────────────────────
+  const modalRenombrar = document.getElementById('modal-renombrar');
+  let _ren = null; // {docId, path, nombre, codigo, num}
+
+  function _renSugerido() {
+    return nombrePlantilla(_ren.codigo, _ren.nombre, _ren.num, fechaDDMMAA('ren-fecha'));
+  }
+
+  function abrirModalRenombrar(docId, path) {
+    const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(docId));
+    const idx = doc ? (doc.archivos || []).findIndex(a => a.path === path) : -1;
+    if (idx < 0) return;
+    const archivo = doc.archivos[idx];
+    _ren = { docId, path, nombre: archivo.nombre, codigo: doc.codigo || '', num: idx + 1 };
+    // El calendario solo aplica a documentos con secuencia '(XX00)' (igual que al subir).
+    const usaFecha = _ren.codigo.includes('(XX00)');
+    const row = document.getElementById('ren-fecha-row');
+    row.classList.toggle('hidden', !usaFecha);
+    row.classList.toggle('flex', usaFecha);
+    if (usaFecha) document.getElementById('ren-fecha').value = hoyISO();
+    document.getElementById('ren-actual').textContent = archivo.nombre;
+    document.getElementById('ren-nombre').value = _renSugerido();
+    modalRenombrar.showModal();
+  }
+
+  document.getElementById('ren-sugerir').addEventListener('click', () => {
+    if (_ren) document.getElementById('ren-nombre').value = _renSugerido();
+  });
+  document.getElementById('ren-fecha').addEventListener('change', () => {
+    if (_ren) document.getElementById('ren-nombre').value = _renSugerido();
+  });
+
+  document.getElementById('ren-ok').addEventListener('click', async () => {
+    if (!_ren) return;
+    const nombre = document.getElementById('ren-nombre').value.trim();
+    if (!nombre || nombre === _ren.nombre) { modalRenombrar.close(); return; }
+    const okBtn = document.getElementById('ren-ok');
+    okBtn.disabled = true;
+    try {
+      const r = await fetch(RENOMBRAR_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify({ empresa: CUR_EMP, sitio: CUR_SITIO, path: _ren.path, nombre }),
+      });
+      const data = await r.json();
+      if (!r.ok) { window.Alert && window.Alert.error(data.error || 'No se pudo renombrar'); return; }
+      modalRenombrar.close();
+      window.Alert && window.Alert.success(`Archivo renombrado a “${data.nombre}”`, { autoHide: 5000 });
+      // AJAX: actualizo nombre/path en memoria y re-renderizo (sin reconsultar Nextcloud).
+      const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(_ren.docId));
+      const a = doc && (doc.archivos || []).find(x => x.path === _ren.path);
+      if (a) { a.path = data.path; a.nombre = data.nombre; ordenarArchivos(doc); }
+      if (DATOS) render(DATOS);
+      _ren = null;
+    } catch (e) {
+      window.Alert && window.Alert.error(e.message || 'Error al renombrar');
+    } finally {
+      okBtn.disabled = false;
+    }
+  });
 
   // Quita la asignación manual de un archivo (vuelve a inesperado o a reconocerse por nombre).
   function desasignarArchivo(path, nombre) {
