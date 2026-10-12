@@ -7,10 +7,15 @@ app_name = 'panel'
 urlpatterns = [
     path('', views.index, name='index'),
 
-    path('empresas/', views.empresas, name='empresas'),
-    path('empresas/nueva/', views.empresa_form, name='empresa_crear'),
-    path('empresas/<int:pk>/', views.empresa_form, name='empresa_editar'),
-    path('empresas/<int:pk>/eliminar/', views.empresa_eliminar, name='empresa_eliminar'),
+    path('nextcloud/', views.nextcloud_view, name='nextcloud'),
+    path('nextcloud/credenciales/', views.nextcloud_credenciales, name='nextcloud_credenciales'),
+    path('nextcloud/probar/', views.nextcloud_probar, name='nextcloud_probar'),
+    path('nextcloud/sincronizar/', views.nextcloud_sincronizar, name='nextcloud_sincronizar'),
+    path('nextcloud/carpetas/nueva/', views.carpeta_crear, name='carpeta_crear'),
+    path('nextcloud/carpetas/disponibles/', views.nextcloud_carpetas_disponibles, name='carpetas_disponibles'),
+    path('nextcloud/carpetas/<int:pk>/', views.carpeta_form, name='carpeta_editar'),
+    path('nextcloud/carpetas/<int:pk>/toggle/<str:campo>/', views.carpeta_toggle, name='carpeta_toggle'),
+    path('nextcloud/carpetas/<int:pk>/eliminar/', views.carpeta_eliminar, name='carpeta_eliminar'),
 
     path('sitios/', views.sitios, name='sitios'),
     path('sitios/nuevo/', views.sitio_form, name='sitio_crear'),
@@ -39,6 +44,8 @@ urlpatterns = [
     path('usuarios/<int:pk>/toggle/', views.usuario_toggle_activo, name='usuario_toggle_activo'),
     path('usuarios/<int:pk>/toggle-acceso/<str:seccion>/', views.usuario_toggle_acceso, name='usuario_toggle_acceso'),
     path('usuarios/<int:pk>/eliminar/', views.usuario_eliminar, name='usuario_eliminar'),
+    path('usuarios/<int:pk>/impersonar/', views.usuario_impersonar, name='usuario_impersonar'),
+    path('usuarios/<int:pk>/invitar/', views.usuario_invitar, name='usuario_invitar'),
 
     path('accesos/', views.accesos, name='accesos'),
     path('accesos/<int:pk>/', views.usuario_sitios, name='usuario_sitios'),

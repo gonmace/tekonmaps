@@ -26,6 +26,7 @@ urlpatterns = [
     path('', views.home, name='home'),
     path('accounts/', include('accounts.urls', namespace='accounts')),
     path('docs/', include('docs.urls', namespace='docs')),
+    path('seguimiento/', include('proyectos.urls', namespace='proyectos')),
     path('panel/', include('panel.urls', namespace='panel')),
 ]
 

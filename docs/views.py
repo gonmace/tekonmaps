@@ -1,3 +1,4 @@
+import functools
 import json
 import os
 from collections import Counter
@@ -17,8 +18,9 @@ from django.utils import timezone as djtz
 from . import company_loader, nextcloud, seguimiento
 from .models import (
     ACCIONES_REVISION, ArchivoOculto, AsignacionArchivo, ConfirmacionDocumento,
-    DocumentoEsperado, DocumentoNoNecesario, EliminacionPendiente, EstructuraCache,
-    ObservacionDocumento, ProyectoFinalCache, ROL_COLORES, SitioCache,
+    CopiaRenombrada, DocumentoEsperado, DocumentoNoNecesario, EliminacionPendiente,
+    EstructuraCache, ObservacionDocumento, ProyectoFinalCache, ROL_COLORES, SitioCache,
+    SitioSincronizado,
 )
 
 
@@ -260,9 +262,15 @@ def _es_tk_redline(user):
 
 def _puede_ver_seccion(user, campo):
     """Acceso a una sección del navbar (``acceso_contratista``/``acceso_finales``/
-    ``acceso_seguimiento``). El superusuario ve todo. Sin perfil → sin acceso."""
+    ``acceso_proyectos``). El superusuario ve todo. Sin perfil → sin acceso.
+
+    ``acceso_seguimiento`` («Seguimiento old») es **solo del superusuario** mientras
+    ``settings.SEGUIMIENTO_OLD_SOLO_SUPERUSER`` sea True (por defecto); el flag del perfil
+    queda inerte."""
     if user.is_superuser:
         return True
+    if campo == "acceso_seguimiento" and settings.SEGUIMIENTO_OLD_SOLO_SUPERUSER:
+        return False
     try:
         return getattr(user.profile, campo)
     except Exception:
@@ -275,8 +283,8 @@ def _landing_url(user):
         return reverse("docs:index")
     if _puede_ver_seccion(user, "acceso_finales"):
         return reverse("docs:final")
-    if _puede_ver_seccion(user, "acceso_seguimiento"):
-        return reverse("docs:seguimiento")
+    if _puede_ver_seccion(user, "acceso_proyectos"):
+        return reverse("proyectos:index")
     return reverse("home")
 
 
@@ -287,6 +295,18 @@ def _guard_seccion(request, campo):
         return None
     messages.warning(request, "No tienes acceso a esa sección.")
     return redirect(_landing_url(request.user))
+
+
+def _solo_tablero_old(vista):
+    """Decorador: la API del tablero «Seguimiento old» es solo del superusuario (antes las
+    escrituras solo exigían ``_es_admin``, es decir, cualquier rol ITO, sin la sección).
+    Con ``SEGUIMIENTO_OLD_SOLO_SUPERUSER=False`` se mantiene el comportamiento anterior."""
+    @functools.wraps(vista)
+    def envuelta(request, *args, **kwargs):
+        if settings.SEGUIMIENTO_OLD_SOLO_SUPERUSER and not request.user.is_superuser:
+            return JsonResponse({"error": "No tienes acceso a esta sección."}, status=403)
+        return vista(request, *args, **kwargs)
+    return envuelta
 
 
 def _gate_api(user, *campos):
@@ -327,13 +347,16 @@ def final(request):
     if guard:
         return guard
     from django.conf import settings
-    from .models import SiteConfig
+    from .models import NextcloudConfig, SiteConfig
     rol = _get_user_rol(request.user)
     try:
         config = SiteConfig.objects.get(clave="NEXTCLOUD_FINAL_BASE")
         nextcloud_base = config.link_para_rol(rol)
     except SiteConfig.DoesNotExist:
-        nextcloud_base = getattr(settings, "NEXTCLOUD_FINAL_BASE", "")
+        # Fallback: config del Panel (pestaña Nextcloud) y, si está vacía, .env.
+        nc = NextcloudConfig.get()
+        nextcloud_base = (getattr(nc, "final_base", "")
+                          or getattr(settings, "NEXTCLOUD_FINAL_BASE", ""))
     return render(request, "docs/final.html", {
         "titulo_pagina": "Docs. Finales",
         "nextcloud_base": nextcloud_base,
@@ -351,7 +374,7 @@ def seguimiento_view(request):
     if permitidas is not None:
         empresas = [e for e in empresas if e.nombre in permitidas]
     return render(request, "docs/seguimiento.html", {
-        "titulo_pagina": "Seguimiento",
+        "titulo_pagina": "Seguimiento old",
         "empresas": empresas,
         "es_admin": _es_admin(request.user),
         "es_coordinador": _es_coordinador(request.user),
@@ -364,7 +387,11 @@ def seguimiento_view(request):
 
 @login_required
 def api_seguimiento(request):
-    """GET: estado de completitud de documentos del ITO para (empresa, sitio)."""
+    """GET: estado de completitud de documentos del ITO para (empresa, sitio).
+
+    Solo el **superusuario** puede iniciar la sincronización de un sitio **nuevo** (su
+    primera carga registra ``SitioSincronizado``); los demás roles solo acceden a sitios
+    ya sincronizados (además de su ``AccesoSitio``)."""
     denied = _gate_api(request.user, "acceso_seguimiento")
     if denied:
         return denied
@@ -375,14 +402,25 @@ def api_seguimiento(request):
     permitidos = _sitios_permitidos(request.user, empresa)
     if permitidos is not None and sitio not in permitidos:
         return JsonResponse({"error": "No tienes acceso a este sitio.", "documentos": []}, status=403)
+    sincronizado = SitioSincronizado.objects.filter(empresa=empresa, sitio=sitio).exists()
+    if not request.user.is_superuser and not sincronizado:
+        return JsonResponse(
+            {"error": "Este sitio aún no fue sincronizado. Pídele al administrador que lo "
+                      "cargue por primera vez en Seguimiento.", "documentos": []}, status=403)
     forzar = request.GET.get("refresh") in ("1", "true")
     try:
-        return JsonResponse(seguimiento.estado_sitio(empresa, sitio, forzar=forzar))
+        est = seguimiento.estado_sitio(empresa, sitio, forzar=forzar)
     except Exception as e:
         return JsonResponse({"error": str(e), "documentos": []}, status=500)
+    # Primera carga exitosa por el superusuario → el sitio queda sincronizado.
+    if request.user.is_superuser and not sincronizado and not est.get("error"):
+        SitioSincronizado.objects.get_or_create(
+            empresa=empresa, sitio=sitio, defaults={"usuario": request.user})
+    return JsonResponse(est)
 
 
 @login_required
+@_solo_tablero_old
 def api_carpetas20(request):
     """GET (superuser): carpetas raíz /20* (constructora) para el selector de refresh."""
     if not request.user.is_superuser:
@@ -394,6 +432,7 @@ def api_carpetas20(request):
 
 
 @login_required
+@_solo_tablero_old
 def refrescar_carpeta(request):
     """POST (superuser): re-escanea SOLO la carpeta /20* indicada para el sitio actual
     (las demás carpetas salen de la caché por carpeta). Devuelve el estado actualizado."""
@@ -413,6 +452,7 @@ def refrescar_carpeta(request):
 
 
 @login_required
+@_solo_tablero_old
 def actualizar_estructura(request):
     """POST (superuser): guarda la estructura mostrada en la plantilla asignada (en su lugar,
     compartida; sin re-escanear carpetas ni crear copias por sitio) y devuelve el estado del
@@ -458,6 +498,7 @@ def _validar_subida(archivo, extensiones, etiqueta):
 
 
 @login_required
+@_solo_tablero_old
 def subir_archivo(request):
     """POST multipart (solo administrador): sube un archivo para un documento al área ITO.
     Campos: empresa, sitio, doc_id, file."""
@@ -493,6 +534,7 @@ def subir_archivo(request):
 
 
 @login_required
+@_solo_tablero_old
 def subir_multimedia(request):
     """POST multipart (admin): sube imágenes/videos a la carpeta del sitio en el área ITO.
     Campos: empresa, sitio, tipo ('imagenes'|'videos'), file (1+). Devuelve el estado."""
@@ -523,6 +565,7 @@ def subir_multimedia(request):
 
 
 @login_required
+@_solo_tablero_old
 def confirmar(request):
     """POST JSON (solo administrador): alterna la confirmación de un rol para un documento.
     Body: {empresa, sitio, doc_id, rol}."""
@@ -565,6 +608,7 @@ def confirmar(request):
 
 
 @login_required
+@_solo_tablero_old
 def observar(request):
     """POST JSON (administrador/revisor): marca un documento como **no conforme** con una
     nota; queda ⚠ hasta que se corrija. Body: {empresa, sitio, doc_id, rol, texto}."""
@@ -607,6 +651,7 @@ def observar(request):
 
 
 @login_required
+@_solo_tablero_old
 def quitar_observacion(request):
     """POST JSON (**solo superusuario**): borra definitivamente la observación de un rol.
     Body: {empresa, sitio, doc_id, rol}."""
@@ -631,6 +676,7 @@ def quitar_observacion(request):
 
 
 @login_required
+@_solo_tablero_old
 def enmendar_observacion(request):
     """POST JSON: **solo el autor** de la observación la marca como enmendada (✓ verde) o
     lo deshace. Body: {empresa, sitio, doc_id, rol, enmendada}."""
@@ -662,6 +708,7 @@ def enmendar_observacion(request):
 
 
 @login_required
+@_solo_tablero_old
 def marcar_necesario(request):
     """POST JSON (solo superuser): marca un documento como necesario/no-necesario para
     el sitio. Body: {empresa, sitio, doc_id, necesario}."""
@@ -689,6 +736,7 @@ def marcar_necesario(request):
 
 
 @login_required
+@_solo_tablero_old
 def asignar_archivo(request):
     """POST JSON (solo administrador): asigna manualmente un archivo a un documento.
     Body: {empresa, sitio, path, doc_id}."""
@@ -717,6 +765,7 @@ def asignar_archivo(request):
 
 
 @login_required
+@_solo_tablero_old
 def desasignar_archivo(request):
     """POST JSON (solo administrador): quita la asignación manual de un archivo (el inverso de
     ``asignar_archivo``). El archivo vuelve a reconocerse por nombre o a quedar como inesperado.
@@ -735,6 +784,7 @@ def desasignar_archivo(request):
 
 
 @login_required
+@_solo_tablero_old
 def renombrar_archivo(request):
     """POST JSON (administrador): renombra un archivo en Nextcloud dentro de su misma
     carpeta (típicamente al nombre que dicta la plantilla del documento). Las marcas de BD
@@ -748,6 +798,9 @@ def renombrar_archivo(request):
     if isinstance(parsed, JsonResponse):
         return parsed
     empresa, sitio, path = parsed
+    if seguimiento.es_path_contratista(path):
+        return JsonResponse({"error": "Los archivos de contratista son de solo lectura. "
+                                      "Usa «Copiar renombrado al área ITO»."}, status=403)
     try:
         nombre = (json.loads(request.body or "{}").get("nombre") or "").strip()
     except ValueError:
@@ -762,6 +815,44 @@ def renombrar_archivo(request):
         return JsonResponse({"error": f"No se pudo renombrar: {e}"}, status=500)
     return JsonResponse({"ok": True, "path": destino,
                          "nombre": destino.rsplit("/", 1)[-1]})
+
+
+@login_required
+@_solo_tablero_old
+def copiar_renombrado(request):
+    """POST JSON (administrador): copia un archivo de **contratista** (intocable) al área
+    ITO con el nombre que dicta la plantilla del documento, y lo asigna al documento.
+    El original y la copia quedan vinculados (``CopiaRenombrada``).
+    Body: {empresa, sitio, path, nombre, doc_id}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido."}, status=405)
+    if not _es_admin(request.user):
+        return JsonResponse({"error": "No autorizado."}, status=403)
+    parsed = _parse_eliminacion(request)
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    empresa, sitio, path = parsed
+    if path.startswith(seguimiento.ROOT_ITO + "/"):
+        return JsonResponse({"error": "Los archivos del área ITO se renombran directamente."},
+                            status=400)
+    try:
+        data = json.loads(request.body or "{}")
+        nombre = (data.get("nombre") or "").strip()
+        doc_id = data.get("doc_id")
+    except ValueError:
+        nombre, doc_id = "", None
+    if not nombre or not doc_id:
+        return JsonResponse({"error": "Faltan el nombre nuevo o el documento."}, status=400)
+    doc = get_object_or_404(DocumentoEsperado, pk=doc_id)
+    try:
+        destino = seguimiento.copiar_renombrado(
+            empresa, sitio, path, doc, nombre, usuario=request.user)
+    except nextcloud.DestinoExiste as e:
+        return JsonResponse({"error": str(e)}, status=409)
+    except Exception as e:
+        return JsonResponse({"error": f"No se pudo copiar: {e}"}, status=500)
+    return JsonResponse({"ok": True, "path": destino,
+                         "nombre": destino.rsplit("/", 1)[-1], "copia_de": path})
 
 
 def _parse_eliminacion(request):
@@ -782,6 +873,7 @@ def _parse_eliminacion(request):
 
 
 @login_required
+@_solo_tablero_old
 def eliminar_archivo(request):
     """POST JSON (administrador): NO borra; **marca** el archivo como pendiente de borrado
     (X). El borrado real lo acepta un Coordinador/superusuario. Body: {empresa, sitio, path}."""
@@ -793,6 +885,9 @@ def eliminar_archivo(request):
     if isinstance(parsed, JsonResponse):
         return parsed
     empresa, sitio, path = parsed
+    if seguimiento.es_path_contratista(path):
+        return JsonResponse({"error": "Los archivos de contratista son de solo lectura: "
+                                      "no se pueden eliminar."}, status=403)
     EliminacionPendiente.objects.update_or_create(
         empresa=empresa, sitio=sitio, path=path, defaults={"usuario": request.user})
     seguimiento.invalidar_datos(empresa, sitio)
@@ -800,6 +895,7 @@ def eliminar_archivo(request):
 
 
 @login_required
+@_solo_tablero_old
 def aceptar_eliminacion(request):
     """POST JSON (Coordinador/superusuario): acepta la marca y **borra** el archivo de
     Nextcloud. Body: {empresa, sitio, path}."""
@@ -811,17 +907,22 @@ def aceptar_eliminacion(request):
     if isinstance(parsed, JsonResponse):
         return parsed
     empresa, sitio, path = parsed
+    if seguimiento.es_path_contratista(path):
+        return JsonResponse({"error": "Los archivos de contratista son de solo lectura: "
+                                      "no se pueden eliminar."}, status=403)
     try:
         nextcloud.delete(path)
     except Exception as e:
         return JsonResponse({"error": f"No se pudo eliminar: {e}"}, status=500)
     EliminacionPendiente.objects.filter(empresa=empresa, sitio=sitio, path=path).delete()
+    CopiaRenombrada.objects.filter(empresa=empresa, sitio=sitio, path_copia=path).delete()
     seguimiento.limpiar_autoconfirmaciones(empresa, sitio, path)
     seguimiento.invalidar_cache(empresa, sitio)
     return JsonResponse({"ok": True, "eliminado": True})
 
 
 @login_required
+@_solo_tablero_old
 def rechazar_eliminacion(request):
     """POST JSON (Coordinador/superusuario): quita la marca de borrado (el archivo se queda).
     Body: {empresa, sitio, path}."""
@@ -839,6 +940,7 @@ def rechazar_eliminacion(request):
 
 
 @login_required
+@_solo_tablero_old
 def ocultar_archivo(request):
     """POST JSON (administrador): **oculta** (soft-delete reversible) una o varias imágenes de
     una galería. NO borra de Nextcloud; solo deja de mostrarlas. Un admin las restaura con
@@ -867,6 +969,7 @@ def ocultar_archivo(request):
 
 
 @login_required
+@_solo_tablero_old
 def restaurar_archivo(request):
     """POST JSON (administrador): restaura una imagen oculta (quita el soft-delete).
     Body: {empresa, sitio, path}."""
@@ -889,7 +992,7 @@ def descargar_archivo(request):
     Solo se permiten rutas bajo el área ITO o bajo carpetas de empresa (que empiecen con '/20').
     Exige acceso a alguna sección de documentos (Contratista/Seguimiento); un visitante sin
     secciones no descarga. El control fino por sitio se aplica en las vistas que listan/asignan."""
-    denied = _gate_api(request.user, "acceso_contratista", "acceso_seguimiento")
+    denied = _gate_api(request.user, "acceso_contratista", "acceso_seguimiento")  # old: solo superusuario
     if denied:
         return denied
     path = request.GET.get("path", "")
@@ -928,7 +1031,7 @@ def _buscar_template(codigo, archivos):
 def descargar_template(request, pk):
     """Descarga el template de un documento esperado, **únicamente** desde la carpeta
     de plantillas en /20-ITO_SEGUIMIENTO/00-PLANTILLAS (búsqueda recursiva por código)."""
-    denied = _gate_api(request.user, "acceso_contratista", "acceso_seguimiento")
+    denied = _gate_api(request.user, "acceso_contratista", "acceso_seguimiento")  # old: solo superusuario
     if denied:
         return denied
     doc = get_object_or_404(DocumentoEsperado, pk=pk)
@@ -953,9 +1056,13 @@ def descargar_template(request, pk):
 def api_sitios(request):
     """GET: retorna lista de sitios (carpetas) para la empresa indicada.
     Con ``?generados=1`` solo devuelve los sitios ya generados por la app (con carpeta
-    en el área ITO); lo usa la asignación de Accesos del Panel."""
-    # Compartido por Docs. Contratista y Seguimiento (y el Panel como superuser).
-    denied = _gate_api(request.user, "acceso_contratista", "acceso_seguimiento")
+    en el área ITO); lo usa la asignación de Accesos del Panel. Con ``?sinc=1`` (el
+    selector de Seguimiento) los no-superusuarios ven solo los sitios **ya
+    sincronizados** (``SitioSincronizado``); el superusuario ve todos (puede iniciar
+    la sincronización de un sitio nuevo)."""
+    # Compartido por Docs. Contratista y Seguimiento (y el Panel / Seguimiento old como superusuario).
+    denied = _gate_api(request.user, "acceso_contratista", "acceso_seguimiento",
+                       "acceso_proyectos")  # old: solo superusuario
     if denied:
         return denied
     empresa = request.GET.get("empresa", "")
@@ -965,6 +1072,8 @@ def api_sitios(request):
     root_path = emp.root_path()
     permitidos = _sitios_permitidos(request.user, empresa)
     solo_generados = request.GET.get("generados") in ("1", "true")
+    solo_sinc = (request.GET.get("sinc") in ("1", "true")
+                 and not request.user.is_superuser)
     try:
         raiz_items = [i for i in _fetch_items(root_path) if i.get("type") == "folder"]
         sitios = sorted(_parse_name(item["path"]) for item in raiz_items)
@@ -973,6 +1082,10 @@ def api_sitios(request):
         if solo_generados:
             generados = seguimiento.sitios_generados()
             sitios = [s for s in sitios if s in generados]
+        if solo_sinc:
+            sincronizados = set(SitioSincronizado.objects.filter(
+                empresa=emp.nombre).values_list("sitio", flat=True))
+            sitios = [s for s in sitios if s in sincronizados]
         return JsonResponse({"sitios": sitios})
     except Exception:
         return JsonResponse({"sitios": []})

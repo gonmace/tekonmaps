@@ -35,10 +35,23 @@ install:
 
 # Tailwind en background + runserver con django-browser-reload.
 # Python/templates: recarga automática. CSS: refrescar tras Tailwind recompilar.
+# Puerto opcional: `make dev 8005` o `make dev PORT=8005` (default 8000).
+ifeq ($(firstword $(MAKECMDGOALS)),dev)
+  DEV_ARG := $(word 2,$(MAKECMDGOALS))
+  ifneq ($(DEV_ARG),)
+    ifneq ($(shell echo '$(DEV_ARG)' | grep -E '^[0-9]+$$'),)
+      PORT := $(DEV_ARG)
+      # el número es un argumento, no un target
+      $(eval $(DEV_ARG):;@:)
+    endif
+  endif
+endif
+PORT ?= 8000
+
 dev:
 	python manage.py migrate
 	python manage.py tailwind start &
-	python manage.py runserver
+	python manage.py runserver $(PORT)
 
 tailwind:
 	python manage.py tailwind start

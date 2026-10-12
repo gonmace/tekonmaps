@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/seguimiento/ocultar/', views.ocultar_archivo, name='ocultar_archivo'),
     path('api/seguimiento/restaurar/', views.restaurar_archivo, name='restaurar_archivo'),
     path('api/seguimiento/renombrar/', views.renombrar_archivo, name='renombrar_archivo'),
+    path('api/seguimiento/copiar-renombrado/', views.copiar_renombrado, name='copiar_renombrado'),
     path('api/seguimiento/asignar/', views.asignar_archivo, name='asignar_archivo'),
     path('api/seguimiento/desasignar/', views.desasignar_archivo, name='desasignar_archivo'),
     path('api/seguimiento/necesario/', views.marcar_necesario, name='marcar_necesario'),

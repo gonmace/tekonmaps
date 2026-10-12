@@ -1,0 +1,220 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Nextcloud — Tk Redline{% endblock %}
+
+{% block panel %}
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <h1 class="text-2xl font-bold">Nextcloud</h1>
+    <p class="text-base-content/60 text-sm">Conexión WebDAV y carpetas raíz que el sistema escanea.</p>
+  </div>
+  <span class="badge {% if configurado %}badge-success{% else %}badge-error{% endif %}">
+    {% if configurado %}Configurado{% else %}No configurado{% endif %}
+  </span>
+</div>
+
+{# ── Credenciales ────────────────────────────────────────────────────────── #}
+<div class="card bg-base-100 border border-base-300 shadow-xs mb-6">
+  <div class="card-body">
+    <div class="flex items-center justify-between">
+      <h2 class="card-title text-info"><i class="fa-solid fa-key"></i> Credenciales</h2>
+      <div class="flex items-center gap-2">
+        <span id="probar-resultado" class="text-sm"></span>
+        <button type="button" id="btn-probar" class="btn btn-info btn-sm">Probar conexión</button>
+      </div>
+    </div>
+    <p class="text-base-content/60 text-sm">
+      Cada campo <strong>vacío</strong> usa el valor de <code>.env</code>.
+      {% if not hay_fila %}Aún no hay configuración en la base de datos: se muestran los valores actuales de <code>.env</code> como referencia (el app-password no se muestra).{% endif %}
+    </p>
+    <form method="post" action="{% url 'panel:nextcloud_credenciales' %}" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+      {% csrf_token %}
+      {% for field in form %}
+      <label class="form-control {% if field.name == 'base_url' %}sm:col-span-2{% endif %}">
+        <span class="label-text font-semibold mb-1">{{ field.label }}</span>
+        {{ field }}
+        {% if field.help_text %}<span class="label-text-alt text-base-content/50 mt-1">{{ field.help_text }}</span>{% endif %}
+        {% for err in field.errors %}<span class="label-text-alt text-error mt-1">{{ err }}</span>{% endfor %}
+      </label>
+      {% endfor %}
+      <div class="sm:col-span-2 text-right">
+        <button type="submit" class="btn btn-success btn-sm">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Qué se escaneará ────────────────────────────────────────────────────── #}
+<div class="alert {% if escaneadas %}alert-info{% else %}alert-warning{% endif %} mb-4 flex-wrap">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  {% if escaneadas %}
+  <span class="font-semibold">El Seguimiento escaneará:</span>
+  <div class="flex flex-wrap gap-1.5 items-center">
+    {% for c in escaneadas %}
+    <span class="badge badge-neutral gap-1" title="{% if c.es_contratista %}Contratista (solo lectura){% else %}Carpeta escaneada{% endif %}">
+      <i class="fa-solid fa-folder"></i> {{ c.carpeta }}{% if c.es_contratista %} <i class="fa-solid fa-lock text-[10px] opacity-60"></i>{% endif %}
+    </span>
+    {% endfor %}
+    <span class="badge badge-ghost gap-1" title="Área ITO: siempre se escanea (ahí sube la app)">
+      <i class="fa-solid fa-cloud-arrow-up"></i> {{ root_ito }} <span class="opacity-60">(área ITO, siempre)</span>
+    </span>
+  </div>
+  {% else %}
+  <span><span class="font-semibold">Ninguna carpeta de constructora se escaneará.</span>
+  Activa el toggle «Escanear» en la tabla (o usa «Sincronizar»). El área ITO ({{ root_ito }}) se escanea siempre.</span>
+  {% endif %}
+</div>
+
+{# ── Carpetas raíz ───────────────────────────────────────────────────────── #}
+<div class="flex items-center justify-between mb-3">
+  <div>
+    <h2 class="text-xl font-bold">Carpetas raíz</h2>
+    <p class="text-base-content/60 text-sm">
+      <strong>Escanear</strong>: el Seguimiento ITO la usa como fuente de archivos.
+      <strong>Contratista</strong>: sus archivos son de solo lectura y la carpeta aparece
+      como empresa (con su <em>código</em>, sin el «20») en Docs. Contratista y Seguimiento.
+    </p>
+  </div>
+  <div class="flex gap-2">
+    <button type="button" id="btn-agregar-carpeta" class="btn btn-success btn-sm">
+      <i class="fa-solid fa-folder-plus"></i> Agregar carpeta
+    </button>
+    <form method="post" action="{% url 'panel:nextcloud_sincronizar' %}"
+          data-confirm="Se listarán las carpetas raíz «20*» de Nextcloud y se agregarán las que falten (no se borra ninguna). ¿Continuar?">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-info btn-sm" title="Agrega en bloque todas las carpetas «20*» que falten"><i class="fa-solid fa-rotate"></i> Sincronizar 20*</button>
+    </form>
+  </div>
+</div>
+
+{# ── Modal: agregar carpeta ─────────────────────────────────────────────── #}
+<dialog id="modal-agregar" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg flex items-center gap-2">
+      <i class="fa-solid fa-folder-plus text-success"></i> Agregar carpeta al escaneo
+    </h3>
+    <p class="text-sm text-base-content/60 mt-1 mb-3">
+      Carpetas en la raíz de Nextcloud que aún no están configuradas:
+    </p>
+    <div id="agregar-lista" class="max-h-72 overflow-y-auto space-y-1">
+      <span class="loading loading-spinner loading-sm"></span>
+    </div>
+    <div class="divider text-xs text-base-content/40">o escribe el nombre exacto</div>
+    <form method="post" action="{% url 'panel:carpeta_crear' %}" class="flex gap-2">
+      {% csrf_token %}
+      <input type="text" name="carpeta" class="input input-bordered input-sm flex-1"
+             placeholder="Nombre de la carpeta raíz (ej: 20 NUEVA)">
+      <button type="submit" class="btn btn-success btn-sm">Agregar</button>
+    </form>
+    <div class="modal-action">
+      <form method="dialog"><button class="btn btn-ghost btn-sm">Cerrar</button></form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+</dialog>
+
+<div class="card bg-base-100 border border-base-300 shadow-xs">
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Carpeta</th><th>Código</th><th>Orden</th>
+          <th>Escanear</th><th>Contratista</th><th>Links</th>
+          <th class="text-right">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in carpetas %}
+        <tr>
+          <td class="font-semibold whitespace-nowrap"><i class="fa-solid fa-folder text-base-content/40"></i> {{ c.carpeta }}</td>
+          <td>{% if c.codigo %}<span class="badge badge-ghost">{{ c.codigo }}</span>{% else %}<span class="text-base-content/40">—</span>{% endif %}</td>
+          <td>{{ c.orden }}</td>
+          <td>
+            <form method="post" action="{% url 'panel:carpeta_toggle' c.pk 'escanear' %}" class="inline">
+              {% csrf_token %}
+              <input type="checkbox" class="toggle toggle-success toggle-sm" {% if c.escanear %}checked{% endif %}
+                     onchange="this.form.submit()" title="Escanear en Seguimiento">
+            </form>
+          </td>
+          <td>
+            <form method="post" action="{% url 'panel:carpeta_toggle' c.pk 'contratista' %}" class="inline">
+              {% csrf_token %}
+              <input type="checkbox" class="toggle toggle-info toggle-sm" {% if c.es_contratista %}checked{% endif %}
+                     onchange="this.form.submit()" title="Carpeta de contratista (solo lectura)">
+            </form>
+          </td>
+          <td class="whitespace-nowrap">
+            {% if c.link_admin %}<span class="badge badge-sm badge-ghost" title="{{ c.link_admin }}">admin</span>{% endif %}
+            {% if c.link_visitante %}<span class="badge badge-sm badge-ghost" title="{{ c.link_visitante }}">visitante</span>{% endif %}
+            {% if not c.link_admin and not c.link_visitante %}<span class="text-base-content/40">—</span>{% endif %}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <a href="{% url 'panel:carpeta_editar' c.pk %}" class="btn btn-edit btn-xs btn-circle" title="Editar"><i class="fa-solid fa-pen"></i></a>
+            <form method="post" action="{% url 'panel:carpeta_eliminar' c.pk %}" class="inline"
+                  data-confirm="¿Quitar «{{ c.carpeta }}» de la configuración? La carpeta en Nextcloud no se toca.">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-delete btn-xs btn-circle" title="Eliminar de la configuración"><i class="fa-solid fa-trash-can"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-base-content/50 py-6">Sin carpetas. Usa «Sincronizar desde Nextcloud».</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  // «Agregar carpeta»: al abrir, carga las carpetas raíz aún no configuradas.
+  const btnAgregar = document.getElementById('btn-agregar-carpeta');
+  const modal = document.getElementById('modal-agregar');
+  const lista = document.getElementById('agregar-lista');
+  function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+  if (btnAgregar) btnAgregar.addEventListener('click', function () {
+    modal.showModal();
+    lista.innerHTML = '<span class="loading loading-spinner loading-sm"></span>';
+    fetch("{% url 'panel:carpetas_disponibles' %}").then(r => r.json()).then(d => {
+      if (d.error) { lista.innerHTML = `<p class="text-error text-sm">${escapeHtml(d.error)}</p>`; return; }
+      if (!d.carpetas.length) {
+        lista.innerHTML = '<p class="text-base-content/50 text-sm">No hay carpetas sin configurar en la raíz de Nextcloud.</p>';
+        return;
+      }
+      lista.innerHTML = d.carpetas.map(c => `
+        <form method="post" action="{% url 'panel:carpeta_crear' %}" class="flex items-center justify-between gap-2 px-2 py-1 rounded-lg hover:bg-base-200">
+          <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+          <input type="hidden" name="carpeta" value="${escapeHtml(c)}">
+          <span class="text-sm font-mono truncate"><i class="fa-solid fa-folder text-base-content/40"></i> ${escapeHtml(c)}</span>
+          <button type="submit" class="btn btn-success btn-xs">Agregar</button>
+        </form>`).join('');
+    }).catch(e => { lista.innerHTML = `<p class="text-error text-sm">${escapeHtml(String(e))}</p>`; });
+  });
+})();
+(function () {
+  const btn = document.getElementById('btn-probar');
+  const out = document.getElementById('probar-resultado');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    btn.disabled = true;
+    out.textContent = 'Probando…';
+    out.className = 'text-sm text-base-content/60';
+    fetch("{% url 'panel:nextcloud_probar' %}", {
+      method: 'POST',
+      headers: {'X-CSRFToken': '{{ csrf_token }}'},
+    }).then(r => r.json()).then(d => {
+      if (d.ok) {
+        out.textContent = `✓ Conexión OK (${d.carpetas} carpeta(s) en la raíz)`;
+        out.className = 'text-sm text-success';
+      } else {
+        out.textContent = `✗ ${d.error || 'Error'}`;
+        out.className = 'text-sm text-error';
+      }
+    }).catch(e => {
+      out.textContent = '✗ ' + e;
+      out.className = 'text-sm text-error';
+    }).finally(() => { btn.disabled = false; });
+  });
+})();
+</script>
+{% endblock %}

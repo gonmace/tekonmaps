@@ -97,7 +97,9 @@ class UserProfile(models.Model):
     # el superusuario habilita cada sección por usuario en el Panel.
     acceso_contratista = models.BooleanField("Acceso Docs. Contratista", default=False)
     acceso_finales = models.BooleanField("Acceso Docs. Finales", default=False)
-    acceso_seguimiento = models.BooleanField("Acceso Seguimiento", default=False)
+    acceso_seguimiento = models.BooleanField("Acceso Seguimiento old", default=False)
+    # Seguimiento de proyectos (etapas, pendientes, fotos): app ``proyectos``.
+    acceso_proyectos = models.BooleanField("Acceso Seguimiento", default=False)
 
     class Meta:
         verbose_name = "Perfil de usuario"
@@ -130,12 +132,28 @@ class AccesoSitio(models.Model):
         return f"{self.user.username} → {self.empresa}/{self.sitio}"
 
 
-class EmpresaLink(models.Model):
-    """Links de Nextcloud por empresa (admin y visitante)."""
-    nombre = models.CharField(
-        max_length=100, unique=True,
-        help_text="Código de empresa tal como aparece en companies.json (ej: AJ, MER)."
-    )
+class CarpetaRaiz(models.Model):
+    """Carpeta raíz de Nextcloud (``/20*``) que el sistema conoce. Fuente única de
+    las empresas (reemplaza a companies.json): cada carpeta marcada como contratista
+    aparece como empresa en el selector, con su ``codigo`` como nombre visible.
+
+    - ``escanear``: el seguimiento la incluye como fuente de archivos.
+    - ``es_contratista``: sus archivos son de **solo lectura** (no renombrar/borrar)
+      y la carpeta se ofrece como empresa en Docs. Contratista / Seguimiento.
+    """
+    carpeta = models.CharField(
+        max_length=200, unique=True,
+        help_text="Nombre de la carpeta en la raíz de Nextcloud (ej: «20 AJ»).")
+    codigo = models.CharField(
+        max_length=100, blank=True,
+        help_text="Código de empresa visible (ej: AJ). OJO: cambiarlo desvincula los "
+                  "accesos, asignaciones y cachés existentes, que guardan este código.")
+    escanear = models.BooleanField(
+        default=True, help_text="El Seguimiento ITO escanea esta carpeta.")
+    es_contratista = models.BooleanField(
+        default=False,
+        help_text="Carpeta de contratista: archivos de solo lectura y aparece como empresa.")
+    orden = models.PositiveIntegerField(default=0)
     link_admin = models.URLField(
         blank=True,
         help_text="URL del share de Nextcloud con permisos de edición (Administrador)."
@@ -144,19 +162,53 @@ class EmpresaLink(models.Model):
         blank=True,
         help_text="URL del share de Nextcloud de solo lectura (Visitante)."
     )
+    creado = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = "Links Nextcloud Empresa"
-        verbose_name_plural = "Links Nextcloud Empresas"
-        ordering = ["nombre"]
+        verbose_name = "Carpeta raíz Nextcloud"
+        verbose_name_plural = "Carpetas raíz Nextcloud"
+        ordering = ["orden", "carpeta"]
 
     def __str__(self):
-        return self.nombre
+        return f"{self.carpeta} ({self.codigo})" if self.codigo else self.carpeta
+
+    def root_path(self):
+        return f"/{self.carpeta}"
 
     def link_para_rol(self, rol):
         if rol != "visitante" and self.link_admin:
             return self.link_admin
         return self.link_visitante
+
+
+class NextcloudConfig(models.Model):
+    """Configuración de la conexión a Nextcloud editable desde el Panel (fila única).
+    Cada campo **vacío** cae al valor de ``.env`` (settings.NEXTCLOUD_*)."""
+    base_url = models.URLField(
+        blank=True, max_length=300,
+        help_text="URL WebDAV, ej: https://cloud…/remote.php/dav/files/<usuario>/")
+    usuario = models.CharField(max_length=150, blank=True)
+    app_password = models.CharField(
+        max_length=200, blank=True,
+        help_text="App-password del usuario de servicio (se guarda en la BD).")
+    final_base = models.URLField(blank=True, max_length=300)
+    templates_path = models.CharField(max_length=300, blank=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Configuración Nextcloud"
+        verbose_name_plural = "Configuración Nextcloud"
+
+    def __str__(self):
+        return "Configuración Nextcloud"
+
+    @classmethod
+    def get(cls):
+        """Fila única o None. No llamar en import-time (tolera tabla sin migrar)."""
+        try:
+            return cls.objects.first()
+        except Exception:
+            return None
 
 
 class SiteConfig(models.Model):
@@ -478,6 +530,48 @@ class AsignacionArchivo(models.Model):
 
     def __str__(self):
         return f"{self.sitio} · {self.path} → {self.documento_id}"
+
+
+class CopiaRenombrada(models.Model):
+    """Vínculo entre un archivo original de contratista (intocable) y su **copia
+    renombrada** en el área ITO. La copia se crea con el nombre de la plantilla
+    (WebDAV COPY); el original nunca se mueve ni se borra."""
+    empresa = models.CharField(max_length=100)
+    sitio = models.CharField(max_length=200)
+    path_original = models.CharField(max_length=500)
+    path_copia = models.CharField(max_length=500)
+    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Copia renombrada"
+        verbose_name_plural = "Copias renombradas"
+        unique_together = [("empresa", "sitio", "path_copia")]
+        indexes = [models.Index(fields=["empresa", "sitio"])]
+
+    def __str__(self):
+        return f"{self.sitio} · {self.path_original} → {self.path_copia}"
+
+
+class SitioSincronizado(models.Model):
+    """Marca **permanente** de que un sitio ya fue sincronizado (escaneado por primera
+    vez) en Seguimiento por un superusuario. Solo el superusuario puede iniciar la
+    sincronización de un sitio nuevo; los demás roles ven únicamente los sitios con
+    esta marca (además de su ``AccesoSitio``). No depende de las cachés (que se borran
+    en cada invalidación)."""
+    empresa = models.CharField(max_length=100)
+    sitio = models.CharField(max_length=200)
+    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Sitio sincronizado"
+        verbose_name_plural = "Sitios sincronizados"
+        unique_together = [("empresa", "sitio")]
+        ordering = ["empresa", "sitio"]
+
+    def __str__(self):
+        return f"{self.empresa}/{self.sitio}"
 
 
 class DocumentoNoNecesario(models.Model):

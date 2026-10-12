@@ -25,6 +25,22 @@
       </div>
       {% endfor %}
 
+      {% if form.modo_acceso %}
+      <script>
+      (function () {
+        const radios = document.querySelectorAll('input[name="modo_acceso"]');
+        const pwd = document.getElementById('{{ form.password.id_for_label }}');
+        if (!radios.length || !pwd) return;
+        const box = pwd.closest('.form-control');
+        function sync() {
+          const modo = (document.querySelector('input[name="modo_acceso"]:checked') || {}).value;
+          box.classList.toggle('hidden', modo !== 'password');
+        }
+        radios.forEach(r => r.addEventListener('change', sync));
+        sync();
+      })();
+      </script>
+      {% endif %}
       <div class="flex gap-2 justify-end pt-2">
         <a href="{% url volver %}" class="btn btn-ghost btn-sm">Cancelar</a>
         <button type="submit" class="btn btn-success btn-sm">Guardar</button>

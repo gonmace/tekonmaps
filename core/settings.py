@@ -24,6 +24,7 @@ ADMIN_URL = config('ADMIN_URL', default='admin/')
 INSTALLED_APPS = [
     'accounts',
     'docs',
+    'proyectos',
     'panel',
     'axes',
 
@@ -46,6 +47,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Impersonación (solo superusuario): intercambia request.user si la sesión lo pide.
+    'accounts.middleware.ImpersonateMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # Activa la zona horaria del navegador (cookie 'tz') para todas las fechas/horas.
@@ -166,6 +169,12 @@ CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 
+# Nombres de cookie propios del proyecto: en dev conviven varias apps Django en
+# localhost (las cookies ignoran el puerto) y con los nombres por defecto
+# ('sessionid'/'csrftoken') cada app pisa la sesión de las demás → logouts constantes.
+SESSION_COOKIE_NAME = 'tkrl_sessionid'
+CSRF_COOKIE_NAME = 'tkrl_csrftoken'
+
 if not DEBUG:
     SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
     SECURE_HSTS_SECONDS = 31536000
@@ -205,7 +214,7 @@ CSP_DEFAULT_SRC = ("'self'",)
 CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'")
 CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net")
 CSP_FONT_SRC = ("'self'", "data:", "https://fonts.gstatic.com", "https://cdn.jsdelivr.net")
-CSP_IMG_SRC = ("'self'", "data:")
+CSP_IMG_SRC = ("'self'", "data:", "https://*.tile.openstreetmap.org", "https://server.arcgisonline.com")
 CSP_CONNECT_SRC = ("'self'",) if not DEBUG else ("'self'", "ws://localhost:*", "ws://127.0.0.1:*")
 
 # ── Integración Nextcloud ─────────────────────────────────────────────────────
@@ -222,6 +231,23 @@ NEXTCLOUD_APP_PASSWORD = config('NEXTCLOUD_APP_PASSWORD', default='')
 # Carpeta (relativa a la raíz del usuario) donde viven los templates descargables
 # de los documentos esperados, ej. '/00-TEMPLATES'. Vacío = descarga deshabilitada.
 NEXTCLOUD_TEMPLATES_PATH = config('NEXTCLOUD_TEMPLATES_PATH', default='')
+# Calendario de Nextcloud (CalDAV) donde Seguimiento crea un evento por cada pendiente con
+# fecha. Nombre visible o identificador; vacío = no sincroniza. El calendario debe existir
+# en la cuenta de servicio (o estar compartido con ella con permiso de edición).
+NEXTCLOUD_CALENDAR = config('NEXTCLOUD_CALENDAR', default='Seguimiento')
+
+# «Seguimiento old» (tablero de completitud documental, app docs) solo lo ve/usa el
+# superusuario. Con False se restituye el comportamiento anterior: acceso por el flag
+# UserProfile.acceso_seguimiento y escrituras por rol.
+SEGUIMIENTO_OLD_SOLO_SUPERUSER = config('SEGUIMIENTO_OLD_SOLO_SUPERUSER', default=True, cast=bool)
+if 'test' in _sys.argv:
+    # Los tests jamás deben escribir en el calendario real (cada test reutiliza pk=1 y la
+    # papelera de Nextcloud rechaza borrar dos veces el mismo URI). Los tests que prueban
+    # la sincronización simulan ``calendario.habilitado``.
+    NEXTCLOUD_CALENDAR = ''
+
+# URL pública de la app (la usan los correos de recordatorio); vacío = sin enlace.
+SITE_URL = config('SITE_URL', default='')
 
 # ── Admins y logging ──────────────────────────────────────────────────────────
 ADMINS = [('Admin', 'admin@example.com')]

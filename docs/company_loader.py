@@ -1,3 +1,9 @@
+"""Empresas (carpetas de contratista) del sistema.
+
+Fuente: el modelo :class:`docs.models.CarpetaRaiz` (carpetas con ``es_contratista=True``
+y ``escanear=True``, administradas en el Panel → Nextcloud). ``companies.json`` queda
+solo como semilla de la migración 0044 y como fallback si la BD aún no está migrada.
+"""
 import json
 from pathlib import Path
 from dataclasses import dataclass
@@ -16,7 +22,8 @@ class Company:
 
     @property
     def nombre_display(self):
-        return self.carpeta_nextcloud
+        # Código limpio (ej. "AJ"); la nomenclatura cruda ("20 AJ") se ve en el Panel.
+        return self.nombre
 
     def root_path(self):
         return f"/{self.carpeta_nextcloud}"
@@ -27,30 +34,32 @@ class Company:
         return self.link_visitante
 
 
-def _load_db_links():
-    """Lee links admin/visitante desde EmpresaLink en la BD."""
+def _get_all_desde_json():
+    """Fallback legacy: lee companies.json (solo si la BD no está migrada)."""
     try:
-        from .models import EmpresaLink
-        return {e.nombre: (e.link_admin, e.link_visitante) for e in EmpresaLink.objects.all()}
-    except Exception:
-        return {}
+        with open(CONFIG_PATH) as f:
+            data = json.load(f)
+    except OSError:
+        return []
+    return [Company(nombre=item["nombre"],
+                    carpeta_nextcloud=item["carpeta_nextcloud"],
+                    orden=item.get("orden", 0))
+            for item in data]
 
 
 def get_all():
-    with open(CONFIG_PATH) as f:
-        data = json.load(f)
-    db_links = _load_db_links()
-    companies = []
-    for item in data:
-        # Ignorar link_nextcloud del JSON (legacy), usar BD
-        c = Company(
-            nombre=item["nombre"],
-            carpeta_nextcloud=item["carpeta_nextcloud"],
-            orden=item.get("orden", 0),
-        )
-        if c.nombre in db_links:
-            c.link_admin, c.link_visitante = db_links[c.nombre]
-        companies.append(c)
+    try:
+        from .models import CarpetaRaiz
+        filas = list(CarpetaRaiz.objects.filter(es_contratista=True, escanear=True))
+    except Exception:
+        return sorted(_get_all_desde_json(), key=lambda c: (c.orden, c.nombre))
+    companies = [Company(
+        nombre=f.codigo or f.carpeta,
+        carpeta_nextcloud=f.carpeta,
+        orden=f.orden,
+        link_admin=f.link_admin,
+        link_visitante=f.link_visitante,
+    ) for f in filas]
     return sorted(companies, key=lambda c: (c.orden, c.nombre))
 
 

@@ -4,10 +4,10 @@
 
 {% block panel %}
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-  <a href="{% url 'panel:empresas' %}" class="card bg-base-100 border border-base-300 shadow-xs hover:shadow-md transition-shadow">
+  <a href="{% url 'panel:nextcloud' %}" class="card bg-base-100 border border-base-300 shadow-xs hover:shadow-md transition-shadow">
     <div class="card-body">
-      <h2 class="card-title text-info"><i class="fa-solid fa-building"></i> Empresas</h2>
-      <p class="text-base-content/60">Links de Nextcloud por empresa (admin / visitante).</p>
+      <h2 class="card-title text-info"><i class="fa-solid fa-cloud"></i> Nextcloud</h2>
+      <p class="text-base-content/60">Credenciales, carpetas escaneadas y empresas (contratistas).</p>
       <span class="text-3xl font-bold">{{ n_empresas }}</span>
     </div>
   </a>
@@ -35,7 +35,7 @@
   <a href="{% url 'panel:usuarios' %}" class="card bg-base-100 border border-base-300 shadow-xs hover:shadow-md transition-shadow">
     <div class="card-body">
       <h2 class="card-title text-info"><i class="fa-solid fa-users"></i> Usuarios</h2>
-      <p class="text-base-content/60">Crear usuarios y asignar rol (visitante o función ITO).</p>
+      <p class="text-base-content/60">Crear usuarios, asignar rol, secciones y sitios, e impersonarlos.</p>
       <span class="text-3xl font-bold">{{ n_usuarios }}</span>
     </div>
   </a>

@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Tablero de seguimiento — Tk Redline{% endblock %}
+
+{% block header %}{% include 'header.html' %}{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1800px] mx-auto px-4 sm:px-6 py-8">
+  <div class="flex flex-wrap items-end gap-3 mb-4">
+    <a href="{% url 'proyectos:index' %}" class="btn btn-ghost btn-sm"><i class="fa-solid fa-arrow-left"></i> Seguimiento</a>
+    <div class="form-control w-full sm:w-64">
+      <span class="label-text font-medium">Buscar</span>
+      <input id="f-texto" class="input input-bordered input-sm w-full" placeholder="Sitio, ITO…">
+    </div>
+    <div class="form-control w-full sm:w-44">
+      <span class="label-text font-medium">Estado</span>
+      <select id="f-estado" class="select select-bordered select-sm w-full">
+        <option value="">Todos</option>
+        {% for c, l in estados_proyecto %}<option value="{{ c }}">{{ l }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="form-control w-full sm:w-52">
+      <span class="label-text font-medium">ITO</span>
+      <select id="f-ito" class="select select-bordered select-sm w-full"><option value="">Todos</option></select>
+    </div>
+    <label class="flex items-center gap-2 cursor-pointer pb-1">
+      <input id="f-vencidos" type="checkbox" class="checkbox checkbox-sm checkbox-error">
+      <span class="label-text font-medium">Solo con vencidos</span>
+    </label>
+    <span id="conteo" class="text-sm text-base-content/60 pb-1 sm:ml-auto"></span>
+  </div>
+
+  <div id="cargando" class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+  <div id="vacio" class="hidden text-center text-base-content/60 py-16">No hay sitios que coincidan.</div>
+
+  <div id="tabla-wrap" class="hidden overflow-x-auto rounded-xl border border-base-300 bg-base-100">
+    <table class="table table-sm">
+      <thead>
+        <tr><th>Sitio</th><th>Estado</th><th>ITO</th><th class="text-center">Pendientes</th>
+            <th class="text-center">Vencidos</th><th>Próximo</th><th>Última nota</th></tr>
+      </thead>
+      <tbody id="filas"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  const API = "{% url 'proyectos:api_tablero' %}";
+  const SEGUIMIENTO = "{% url 'proyectos:index' %}";
+  const COLOR = { ASG: '#6b7280', ING: '#fcd34d', EJE: '#2563eb', TER: '#16a34a', PTG: '#8b5cf6', CAN: '#dc2626' };
+  const $ = id => document.getElementById(id);
+  const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+  const fmtFecha = iso => new Date(iso + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  const fmtDT = iso => new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' });
+  let SITIOS = [], HOY = '';
+
+  function pintar() {
+    const t = $('f-texto').value.trim().toLowerCase(), est = $('f-estado').value, ito = $('f-ito').value;
+    const solo = $('f-vencidos').checked;
+    const lista = SITIOS.filter(s =>
+      (!t || (s.sitio + ' ' + s.itos.join(' ') + ' ' + s.empresa_display).toLowerCase().includes(t)) &&
+      (!est || s.estado === est) && (!ito || s.itos.includes(ito)) && (!solo || s.vencidos > 0));
+    $('conteo').textContent = `${lista.length} de ${SITIOS.length} sitios`;
+    $('vacio').classList.toggle('hidden', lista.length > 0);
+    $('tabla-wrap').classList.toggle('hidden', lista.length === 0);
+    $('filas').innerHTML = lista.map(s => {
+      const c = COLOR[s.estado] || '#6b7280';
+      const url = `${SEGUIMIENTO}?empresa=${encodeURIComponent(s.empresa)}&sitio=${encodeURIComponent(s.sitio)}`;
+      const prox = s.proximo
+        ? `<span class="${s.proximo.fecha < HOY ? 'text-error font-semibold' : ''}">${esc(fmtFecha(s.proximo.fecha))}${s.proximo.hora ? ' · ' + esc(s.proximo.hora) : ''}</span>
+           <span class="text-base-content/70"> ${esc(s.proximo.titulo)}</span>`
+        : '<span class="text-base-content/40">—</span>';
+      const nota = s.ultima_nota
+        ? `<span class="text-base-content/70" title="${esc(s.ultima_nota.texto)}">${esc(s.ultima_nota.texto.slice(0, 70))}${s.ultima_nota.texto.length > 70 ? '…' : ''}</span>
+           <span class="text-xs text-base-content/50"> · ${esc(fmtDT(s.ultima_nota.fecha))}</span>`
+        : '<span class="text-base-content/40">—</span>';
+      return `<tr class="hover cursor-pointer" data-url="${url}">
+        <td class="font-medium"><a href="${url}" class="hover:underline">${esc(s.sitio)}</a>
+            <div class="text-xs text-base-content/50">${esc(s.empresa_display)}</div></td>
+        <td class="whitespace-nowrap"><span class="inline-block w-2.5 h-2.5 rounded-full mr-1" style="background:${c}"></span>${esc(s.estado_display)}</td>
+        <td>${s.itos.length ? s.itos.map(n => `<span class="badge badge-outline badge-sm mr-1 whitespace-nowrap h-auto py-0.5">${esc(n)}</span>`).join('') : '<span class="text-base-content/40">Sin asignar</span>'}</td>
+        <td class="text-center whitespace-nowrap">${s.abiertos} <span class="text-base-content/40">/ ${s.total}</span>
+            ${s.altas ? `<i class="fa-solid fa-flag text-error ml-1" title="${s.altas} de prioridad alta"></i>` : ''}</td>
+        <td class="text-center">${s.vencidos ? `<span class="badge badge-error badge-sm">${s.vencidos}</span>` : '<span class="text-base-content/40">0</span>'}</td>
+        <td>${prox}</td><td>${nota}</td></tr>`;
+    }).join('');
+  }
+
+  async function cargar() {
+    try {
+      const r = await fetch(API);
+      const d = await r.json();
+      SITIOS = d.sitios || []; HOY = d.hoy;
+      const itos = [...new Set(SITIOS.flatMap(s => s.itos))].sort((a, b) => a.localeCompare(b, 'es'));
+      $('f-ito').innerHTML = '<option value="">Todos</option>' + itos.map(n => `<option>${esc(n)}</option>`).join('');
+    } catch (e) { SITIOS = []; }
+    $('cargando').classList.add('hidden');
+    pintar();
+  }
+
+  ['f-texto', 'f-estado', 'f-ito', 'f-vencidos'].forEach(id => $(id).addEventListener('input', pintar));
+  $('filas').addEventListener('click', ev => {
+    const tr = ev.target.closest('tr[data-url]');
+    if (tr && !ev.target.closest('a')) location.href = tr.dataset.url;
+  });
+  cargar();
+})();
+</script>
+{% endblock %}
+
+{% block footer %}
+{% include "footer.html" %}
+{% endblock %}

@@ -21,8 +21,8 @@ def _landing(user):
         return reverse("docs:index")
     if p and p.acceso_finales:
         return reverse("docs:final")
-    if p and p.acceso_seguimiento:
-        return reverse("docs:seguimiento")
+    if p and p.acceso_proyectos:
+        return reverse("proyectos:index")
     return reverse("home")
 
 
@@ -129,4 +129,15 @@ def crear_password_view(request):
 def logout_view(request):
     """Cierra sesión y redirige al root."""
     logout(request)
+    return redirect("home")
+
+
+def dejar_impersonacion(request):
+    """POST: termina la impersonación (quita la clave de sesión) y vuelve al Panel.
+    No exige superusuario: mientras se impersona, ``request.user`` es el objetivo;
+    la clave solo puede existir si la puso un superusuario real."""
+    from .middleware import IMPERSONATE_SESSION_KEY
+    if request.method == "POST":
+        request.session.pop(IMPERSONATE_SESSION_KEY, None)
+        return redirect("panel:usuarios")
     return redirect("home")

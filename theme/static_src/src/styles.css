@@ -8,6 +8,7 @@
 @source "../../../accounts/**/*.html";
 @source "../../../docs/**/*.html";
 @source "../../../panel/**/*.html";
+@source "../../../proyectos/**/*.html";
 
 /* Clases generadas dinámicamente en JavaScript (no detectadas por el scanner) */
 @source inline("flex items-center gap-1 gap-1.5 gap-2 gap-3 gap-4 shrink-0 flex-shrink-0 flex-1 min-w-0 truncate");

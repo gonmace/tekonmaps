@@ -2,6 +2,9 @@
 
 {% block title %}Usuarios — Tk Redline{% endblock %}
 
+{# Tabla ancha (7 columnas): usa todo el ancho de la ventana. #}
+{% block panel_ancho %}max-w-none{% endblock %}
+
 {% block panel %}
 <div class="flex items-center justify-between mb-4">
   <h1 class="text-2xl font-bold">Usuarios</h1>
@@ -60,9 +63,9 @@
                 <input type="checkbox" class="toggle toggle-info toggle-xs" {% if row.acceso_finales %}checked{% endif %} onchange="this.form.submit()" />
                 <span>Finales</span>
               </form>
-              <form method="post" action="{% url 'panel:usuario_toggle_acceso' row.u.pk 'seguimiento' %}" class="inline-flex items-center gap-1">
+              <form method="post" action="{% url 'panel:usuario_toggle_acceso' row.u.pk 'proyectos' %}" class="inline-flex items-center gap-1">
                 {% csrf_token %}
-                <input type="checkbox" class="toggle toggle-info toggle-xs" {% if row.acceso_seguimiento %}checked{% endif %} onchange="this.form.submit()" />
+                <input type="checkbox" class="toggle toggle-info toggle-xs" {% if row.acceso_proyectos %}checked{% endif %} onchange="this.form.submit()" />
                 <span>Seguimiento</span>
               </form>
             </div>
@@ -81,13 +84,28 @@
           </td>
           <td class="text-right whitespace-nowrap">
             {% if not row.u.is_superuser %}
-            <a href="{% url 'panel:usuario_sitios' row.u.pk %}" class="btn btn-ghost btn-xs">Sitios</a>
+            <a href="{% url 'panel:usuario_sitios' row.u.pk %}" class="btn btn-ghost btn-xs btn-circle" title="Sitios asignados"><i class="fa-solid fa-location-dot"></i></a>
             {% endif %}
-            <a href="{% url 'panel:usuario_editar' row.u.pk %}" class="btn btn-edit btn-xs">Editar</a>
-            {% if row.u != request.user and not row.u.is_superuser %}
-            <form method="post" action="{% url 'panel:usuario_eliminar' row.u.pk %}" class="inline" onsubmit="return confirm('¿Eliminar al usuario {{ row.u.username|escapejs }}?');">
+            {% if row.sin_password and row.u.is_active and not row.u.is_superuser %}
+            <form method="post" action="{% url 'panel:usuario_invitar' row.u.pk %}" class="inline"
+                  data-confirm="¿Enviar a {{ row.u.email|default:row.u.username }} el correo para que cree su contraseña?">
               {% csrf_token %}
-              <button type="submit" class="btn btn-delete btn-xs">Eliminar</button>
+              <button type="submit" class="btn btn-ghost btn-xs btn-circle" title="Enviar correo de acceso"><i class="fa-solid fa-envelope"></i></button>
+            </form>
+            {% endif %}
+            {% if row.u != request.user and not row.u.is_superuser %}
+            <form method="post" action="{% url 'panel:usuario_impersonar' row.u.pk %}" class="inline"
+                  data-confirm="¿Ver la aplicación como {{ row.u.first_name|default:row.u.username }}? Podrás volver desde el banner superior.">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-ghost btn-xs btn-circle" title="Ver como este usuario"><i class="fa-solid fa-user-secret"></i></button>
+            </form>
+            {% endif %}
+            <a href="{% url 'panel:usuario_editar' row.u.pk %}" class="btn btn-edit btn-xs btn-circle" title="Editar"><i class="fa-solid fa-pen"></i></a>
+            {% if row.u != request.user and not row.u.is_superuser %}
+            <form method="post" action="{% url 'panel:usuario_eliminar' row.u.pk %}" class="inline"
+                  data-confirm="¿Eliminar al usuario {{ row.u.username }}?" data-confirm-type="error" data-confirm-ok="Eliminar" data-confirm-class="btn-delete">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-delete btn-xs btn-circle" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
             </form>
             {% endif %}
           </td>

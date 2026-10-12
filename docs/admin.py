@@ -5,17 +5,20 @@ from django.contrib.auth.models import User
 from .models import (
     AccesoSitio,
     AsignacionArchivo,
+    CarpetaRaiz,
     ConfirmacionDocumento,
+    CopiaRenombrada,
     DocumentoNoNecesario,
     DocumentoEsperado,
-    EmpresaLink,
     EstructuraCache,
+    NextcloudConfig,
     PlantillaEstructura,
     ProyectoFinalCache,
     SeguimientoCache,
     SiteConfig,
     SitioCache,
     SitioEstructura,
+    SitioSincronizado,
     UserProfile,
 )
 
@@ -46,7 +49,7 @@ class UserProfileInline(admin.StackedInline):
     model = UserProfile
     can_delete = False
     verbose_name = "Perfil"
-    fields = ("rol", "acceso_contratista", "acceso_finales", "acceso_seguimiento")
+    fields = ("rol", "acceso_contratista", "acceso_finales", "acceso_proyectos")
 
 
 class AccesoSitioInline(admin.TabularInline):
@@ -78,10 +81,30 @@ class SiteConfigAdmin(admin.ModelAdmin):
     fields = ("clave", "link_admin", "link_visitante", "descripcion")
 
 
-@admin.register(EmpresaLink)
-class EmpresaLinkAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "link_admin", "link_visitante")
-    fields = ("nombre", "link_admin", "link_visitante")
+@admin.register(CarpetaRaiz)
+class CarpetaRaizAdmin(admin.ModelAdmin):
+    list_display = ("carpeta", "codigo", "escanear", "es_contratista", "orden")
+    list_editable = ("escanear", "es_contratista", "orden")
+    search_fields = ("carpeta", "codigo")
+
+
+@admin.register(NextcloudConfig)
+class NextcloudConfigAdmin(admin.ModelAdmin):
+    list_display = ("base_url", "usuario", "actualizado")
+
+
+@admin.register(SitioSincronizado)
+class SitioSincronizadoAdmin(admin.ModelAdmin):
+    list_display = ("empresa", "sitio", "usuario", "fecha")
+    list_filter = ("empresa",)
+    search_fields = ("sitio",)
+
+
+@admin.register(CopiaRenombrada)
+class CopiaRenombradaAdmin(admin.ModelAdmin):
+    list_display = ("empresa", "sitio", "path_original", "path_copia", "usuario", "fecha")
+    list_filter = ("empresa",)
+    search_fields = ("sitio", "path_original", "path_copia")
 
 
 @admin.register(EstructuraCache)

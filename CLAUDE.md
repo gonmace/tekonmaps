@@ -12,10 +12,14 @@ Django app ("Tk Redline" / `pti.tekon-rl.cl`) that presents Nextcloud document t
 Browser → Django (AJAX) → docs/nextcloud.py (WebDAV PROPFIND/MKCOL) → Nextcloud → JSON
 ```
 
-Credenciales en `.env`: `NEXTCLOUD_BASE_URL` (`…/remote.php/dav/files/<usuario>/`),
-`NEXTCLOUD_USER`, `NEXTCLOUD_APP_PASSWORD`. Escrituras acotadas del cliente: `mkcol`/`ensure_tree`
-(crear carpetas), `upload` (subidas del área ITO), `delete` (solo al aceptar una eliminación
-pendiente) y `move` (renombrar sin sobrescribir). La integración previa vía n8n fue retirada.
+Credenciales: el modelo **`NextcloudConfig`** (fila única, editable en Panel → Nextcloud) tiene
+precedencia campo a campo; cada campo vacío cae a `.env` (`NEXTCLOUD_BASE_URL`
+`…/remote.php/dav/files/<usuario>/`, `NEXTCLOUD_USER`, `NEXTCLOUD_APP_PASSWORD`). La config
+efectiva se cachea 60 s (clave `nc:config`, ver `nextcloud._db_config`); el Panel la invalida al
+guardar. Escrituras acotadas del cliente: `mkcol`/`ensure_tree` (crear carpetas), `upload`
+(subidas del área ITO), `delete` (solo al aceptar una eliminación pendiente), `move` (renombrar
+sin sobrescribir) y `copy` (COPY sin sobrescribir, para la copia renombrada de archivos de
+contratista). La integración previa vía n8n fue retirada.
 
 The infrastructure (settings, Docker, deploy scripts, Makefile) follows the `Dj-Skeleton`
 conventions: a single env-driven `core/settings.py` plus a `make`-based workflow.
@@ -71,18 +75,52 @@ CSS: `cd theme/static_src && npm run build` (o `npm run start` para watch). Sali
 - **`panel/`** — panel de gestión **solo para superusuarios** (alternativa al admin de Django), en
   `/panel/`. Sin modelos propios; gestiona los de `docs`/`auth`. Gate:
   `superuser_required = user_passes_test(lambda u: u.is_superuser, login_url='accounts:login')`
-  en cada vista. Secciones: **Empresas** (`EmpresaLink` CRUD), **Docs. Finales** (`SiteConfig`
-  CRUD), **Docs. ITO** (`DocumentoEsperado` CRUD), **Usuarios** (alta solo con **nombre+correo+rol**
+  en cada vista. Secciones: **Nextcloud** (credenciales `NextcloudConfig` —editables, con
+  «Probar conexión»— + **carpetas raíz** `CarpetaRaiz`: botón «Sincronizar desde Nextcloud»
+  —upsert de las carpetas `/20*`, nunca borra— y toggles **Escanear**/**Contratista**; los
+  toggles/sync/eliminar purgan `SeguimientoCache` + `cache.clear()` porque cambian las fuentes
+  del escaneo; un banner arriba de la tabla resume **qué carpetas se escanearán** —las
+  `escanear=True` con candado si son contratista— más el área ITO, que se escanea siempre),
+  **Docs. Finales** (`SiteConfig` CRUD), **Docs. ITO** (`DocumentoEsperado` CRUD),
+  **Usuarios** (alta solo con **nombre+correo+rol**
   → `set_unusable_password`; editar nombre/correo/rol/activo, opción de reset o "requerir nueva
   contraseña"; **toggles** en la lista de activo y de **acceso por sección** —Contratista/
-  Finales/Seguimiento, `UserProfile.acceso_*`—; borrar — protege al propio usuario y a
-  superusuarios), **Accesos** (asignar a cada usuario los **sitios** que puede ver, modelo
+  Finales/Seguimiento, `UserProfile.acceso_*`—; **impersonar** (ver abajo); borrar — protege al
+  propio usuario y a superusuarios; la página usa ancho completo vía el block `panel_ancho` y
+  botones de icono), **Accesos** (asignar a cada usuario los **sitios** que puede ver, modelo
   `AccesoSitio`; solo se ofrecen los sitios **ya generados** —con carpeta en el área ITO,
   vía `api_sitios?generados=1` → `seguimiento.sitios_generados()`—, no se crean),
   **Cachés** (ver y limpiar `EstructuraCache`/`SitioCache`/`ProyectoFinalCache`/`SeguimientoCache`
   + `cache.clear()`). El navbar
   (`header.html`) muestra el enlace **Panel** solo si `user.is_superuser`. El admin de Django
   sigue registrado (`docs/admin.py`) como respaldo en `ADMIN_URL`, pero ya no se enlaza en la UI.
+- **Impersonación (solo superusuario):** botón 🕵 en Panel → Usuarios (`usuario_impersonar`) guarda
+  `impersonar_uid` en la sesión; `accounts.middleware.ImpersonateMiddleware` (tras
+  `AuthenticationMiddleware`) intercambia `request.user` por el objetivo (nunca un superusuario)
+  y deja el real en `request.usuario_real`. Sin `login()`: axes y `last_login` intactos; toda la
+  app (roles, secciones, Panel) se ve como el objetivo. `header.html` muestra un banner con
+  «Volver a mi cuenta» (POST a `accounts:volver` → `dejar_impersonacion`, fuera del gate).
+- **`proyectos/`** — **Seguimiento** (navbar «Seguimiento»; el tablero de completitud documental pasó
+  a llamarse **«Seguimiento old»** y es **solo del superusuario**; ver «Acceso por sección»). Bitácora
+  por sitio: `Proyecto` (estado general ASG/ING/EJE/TER/PTG/CAN, `unique(empresa, sitio)`, creado
+  perezosamente por `servicios.obtener_proyecto`) con 2 `Etapa` (Ingeniería/Construcción,
+  estados PEN/CUR/TER/PTG/CAN), `Pendiente` (título+fecha+responsable+hecho), `Nota` (bitácora) e
+  `Imagen`. **Regla:** Ingeniería no puede estar «En curso» a la vez que Construcción
+  (`servicios.cambiar_estado_etapa`). Las fotos viven en Nextcloud
+  (`/20-ITO_SEGUIMIENTO/<sitio>/06_PROYECTO/<Ingenieria|Construccion>/`) y se sirven por el
+  proxy `proyectos:imagen_ver` (sin MEDIA/Pillow). Acceso: flag `UserProfile.acceso_proyectos`
+  (toggle «Seguimiento» en Panel → Usuarios); lecturas exigen sección + `AccesoSitio`, escrituras
+  además `_es_admin`; borrar notas/fotos = autor o coordinador/superusuario. El selector
+  empresa→sitio reusa `docs:api_sitios` (sin `sinc=1`).
+  **Dictado por voz** en la Bitácora: mantener Espacio en el cuadro de nota usa la
+  Web Speech API del navegador (`es-CL`, solo frontend); deja el texto en el textarea, no auto-envía.
+  **Extras de `proyectos`:** tablero (`proyectos:tablero`, panorama de todos los sitios visibles con
+  vencidos/próximo/última nota y filtros); pendientes editables con **responsable = usuario del
+  sitio o texto libre** (`responsable_user`/`responsable`) y **prioridad** Alta/Normal; **borrado
+  lógico** de pendientes y notas (`eliminado_en`, restaurables desde la «Papelera» del Historial);
+  `Actividad` = registro automático de cambios (`servicios.registrar`); y el comando
+  `python manage.py enviar_recordatorios [--dias N] [--dry-run]` (cron diario) que manda a cada
+  responsable/ITO un correo con sus pendientes vencidos y próximos (`SITE_URL` para el enlace).
 - **`docs/`** — la app principal. Todas las vistas son `@login_required` y resuelven el rol con
   `_get_user_rol` (`user.profile.rol`, default `"visitante"`).
 - **Roles (un solo campo `UserProfile.rol`):** `visitante` (solo lectura) o una **función ITO**
@@ -92,12 +130,19 @@ CSS: `cd theme/static_src && npm run build` (o `npm run start` para watch). Sali
   `_es_coordinador` = `is_superuser or rol == "rol_coordinador"` (acepta borrados). `link_para_rol`
   da el link de edición a todo lo que no sea visitante. (Antes había `rol` + `rol_ito`; se
   consolidaron en mig. `0037`.)
-- **Acceso por sección (`UserProfile.acceso_contratista`/`acceso_finales`/`acceso_seguimiento`):**
-  controla la visibilidad de las 3 secciones del navbar. **Restrictivo** (default `False`); el
-  superusuario ve todo. Las vistas `index`/`final`/`seguimiento_view` y sus APIs de lectura
-  (`api_sitios`/`api_carpetas*`/`api_final_*`/`api_seguimiento`) lo exigen vía
-  `_exigir_seccion`/`_gate_api` (403 si no). El navbar (`header.html`) oculta el enlace; tras el
-  login, `accounts._landing` aterriza en la primera sección permitida (o `home`).
+- **Acceso por sección (`UserProfile.acceso_contratista`/`acceso_finales`/`acceso_proyectos`):**
+  controla la visibilidad de las secciones del navbar (Docs. Contratista, Docs. Finales,
+  Seguimiento). **Restrictivo** (default `False`); el superusuario ve todo. Las vistas
+  `index`/`final`/`proyectos:index` y sus APIs lo exigen vía `_guard_seccion`/`_gate_api` (403
+  si no). El navbar (`header.html`) oculta el enlace; tras el login, `accounts._landing` aterriza
+  en la primera sección permitida (o `home`). **«Seguimiento old» (`docs:seguimiento` y toda
+  `api/seguimiento/*`) es solo del superusuario:** `_puede_ver_seccion` devuelve False para
+  `acceso_seguimiento` y el decorador `_solo_tablero_old` cierra sus endpoints de escritura,
+  mientras `settings.SEGUIMIENTO_OLD_SOLO_SUPERUSER` (env, default True) sea True; con False
+  vuelve el modo anterior (flag del perfil + rol). El flag `acceso_seguimiento` se conserva
+  pero ya no se asigna desde el Panel. El alta/edición de usuario del Panel fija el rol y las
+  casillas de acceso (por defecto solo Seguimiento) y, si el rol no ve todos los sitios, abre la
+  pantalla de sitios del usuario.
 - **Acceso por sitio (`AccesoSitio`):** ortogonal al rol. El **superusuario ve todo**; cualquier
   otro usuario solo ve los `(empresa, sitio)` que tenga asignados en el Panel (**Accesos**). Sin
   asignaciones **no ve ningún sitio** (restrictivo). Helpers `_sitios_permitidos(user, empresa)` /
@@ -107,23 +152,41 @@ CSS: `cd theme/static_src && npm run build` (o `npm run start` para watch). Sali
   revisor puede marcar **"No conforme"** con una nota (`ObservacionDocumento`, vista `observar`) →
   el documento muestra ⚠. Conforme y observación son excluyentes por (doc, rol); subir un archivo
   corregido limpia confirmaciones **y** observaciones.
+- **Solo lectura de contratistas:** los archivos bajo una carpeta raíz con
+  `CarpetaRaiz.es_contratista=True` no se renombran ni se borran (guards 403 en
+  `renombrar_archivo`/`eliminar_archivo`/`aceptar_eliminacion` vía
+  `seguimiento.es_path_contratista`, que normaliza montajes `' (N)'`; el front oculta los
+  botones con el flag por archivo `solo_lectura`). Las acciones solo-BD (asignar, ocultar,
+  confirmar, observar) siguen permitidas.
 - **Renombrar según plantilla:** en la lista de archivos de un documento (botón "ver" de la
   columna central), la varita —solo en documentos **con `codigo`**— abre un modal con el
   nombre que dicta la plantilla
   (`DocumentoEsperado.codigo` con el código de sitio real y, si trae `(XX00)`, correlativo+fecha
-  — misma sugerencia que el modal de subida), editable. Vista `renombrar_archivo` →
-  `seguimiento.renombrar_archivo` → `nextcloud.move` (MOVE sin sobrescribir, mismo directorio);
-  los registros por path (`AsignacionArchivo`/`EliminacionPendiente`/`ArchivoOculto`) siguen al
-  archivo. No toca confirmaciones/observaciones (el contenido no cambió).
+  — misma sugerencia que el modal de subida), editable. Dos modos según el archivo:
+  - **Área ITO / carpeta editable:** vista `renombrar_archivo` → `seguimiento.renombrar_archivo`
+    → `nextcloud.move` (MOVE sin sobrescribir, mismo directorio); los registros por path
+    (`AsignacionArchivo`/`EliminacionPendiente`/`ArchivoOculto`/`CopiaRenombrada`) siguen al
+    archivo. No toca confirmaciones/observaciones (el contenido no cambió).
+  - **Archivo de contratista (solo lectura):** la misma varita hace **copia renombrada**: vista
+    `copiar_renombrado` → `seguimiento.copiar_renombrado` → `nextcloud.copy` a
+    `/20-ITO_SEGUIMIENTO/<sitio>/<carpeta de la etapa>` + `AsignacionArchivo` de la copia +
+    vínculo `CopiaRenombrada` (original↔copia). En la UI ambos quedan enlazados con el icono
+    clone (tooltip «Copia renombrada de …» / «Ya tiene copia renombrada»); la varita se oculta
+    si el original ya tiene copia. Borrar la copia (dos pasos) elimina el vínculo.
 - **Borrado en dos pasos:** el botón eliminar **marca** el archivo (`EliminacionPendiente`, X
   tachada) vía `eliminar_archivo`; solo Coordinador/superusuario **aceptan** (`aceptar_eliminacion`
-  → borra de Nextcloud) o **rechazan** (`rechazar_eliminacion`).
+  → borra de Nextcloud) o **rechazan** (`rechazar_eliminacion`). Bloqueado (403) en carpetas de
+  contratista.
 
 ### docs — flujo de datos
-- **Empresas:** `companies.json` → `docs/company_loader.py` (`Company` dataclasses). Los links
-  de Nextcloud por empresa se superponen desde el modelo `EmpresaLink` (`link_admin`/
-  `link_visitante`), elegidos por rol con `link_para_rol(rol)`. `SiteConfig` guarda los links de
-  "Docs. Finales".
+- **Empresas:** modelo **`CarpetaRaiz`** (Panel → Nextcloud) — una fila por carpeta raíz `/20*`
+  (`carpeta` cruda p. ej. `"20 AJ"`, `codigo` visible p. ej. `"AJ"`, toggles `escanear`/
+  `es_contratista`, links admin/visitante). `docs/company_loader.py` conserva su API (`Company`,
+  `get_all`, `get_by_nombre`) leyendo las filas con `es_contratista=True, escanear=True`;
+  `nombre_display` = el **código sin «20»** (la nomenclatura cruda solo se ve en el Panel).
+  `companies.json` quedó como semilla de la migración `0044` (y fallback si la BD no está
+  migrada); `EmpresaLink` fue absorbido por `CarpetaRaiz` (mig. `0045`). `SiteConfig` sigue
+  guardando los links de "Docs. Finales".
 - **Acceso a Nextcloud** (`docs/nextcloud.py`, WebDAV): `list_folder` (lista items, reemplaza al
   antiguo `_fetch_items`), `tree` (recorrido recursivo Depth:1 paralelo), `mkcol`/`ensure_tree`
   (crear carpetas). `docs/views.py` mantiene los helpers `_fetch_items`/`_fetch_deep` como adaptadores
@@ -146,11 +209,21 @@ CSS: `cd theme/static_src && npm run build` (o `npm run start` para watch). Sali
 - **Dónde caen las subidas:** un documento subido cae en `/20-ITO_SEGUIMIENTO/<sitio>/<ETAPA>/[CARPETA]`
   (`DocumentoEsperado.carpeta_contenedora()`, sueltos en la etapa, sin subcarpeta por documento); la
   multimedia en `/20-ITO_SEGUIMIENTO/<sitio>/05_SEGUIMIENTO/<Imágenes|Videos>` (`media_base`).
-- **Completitud:** `estado_sitio(empresa, sitio)` escanea (PROPFIND, paralelo) todas las carpetas
-  `/20*` de constructora (por código de sitio) **más** el área ITO, asigna cada archivo a un documento
-  (por `AsignacionArchivo` o `score_match`) y lo marca *presente* si tiene ≥1 archivo del tipo
-  esperado. Tablero en `/docs/seguimiento/` (enlace **Seguimiento ITO** del navbar). Caché
-  `SeguimientoCache` (invalidación por timestamp).
+- **Completitud:** `estado_sitio(empresa, sitio)` escanea (PROPFIND, paralelo) las carpetas
+  raíz con `CarpetaRaiz.escanear=True` (`seguimiento.roots_constructora()`, ya **no** se
+  descubren dinámicamente — se administran en Panel → Nextcloud; por código de sitio) **más** el
+  área ITO, asigna cada archivo a un documento (por `AsignacionArchivo` o `score_match`) y lo
+  marca *presente* si tiene ≥1 archivo del tipo esperado. Cada archivo lleva `origen`
+  (`ito`/`constructor`) y `solo_lectura` (root con `es_contratista=True`). Tablero en
+  `/docs/seguimiento/` (enlace **Seguimiento ITO** del navbar). Caché `SeguimientoCache`
+  (invalidación por timestamp).
+- **Sincronización de sitios nuevos (solo superusuario):** la **primera carga** de un sitio en
+  Seguimiento (el escaneo frío) solo puede iniciarla el superusuario; su carga exitosa crea la
+  marca **permanente** `SitioSincronizado` (no depende de las cachés, que se borran al
+  invalidar). Los demás roles —incluidos Coordinador/TK Redline— solo ven en el selector los
+  sitios ya sincronizados (`api_sitios?sinc=1`) y `api_seguimiento` les responde 403 en sitios
+  sin marca. Esto es **solo en Seguimiento**: Docs. Contratista sigue listando todas las
+  carpetas permitidas por `AccesoSitio`.
 - **Fast-path (carga rápida):** `estado_sitio` guarda la *fecha* (mtime, `folder_lastmod`) de **la
   carpeta del sitio dentro de cada root `/20*` + el área ITO**, junto con la lista `archivos`
   escaneada (clave `seg:fp:*`, TTL 6 h vía `_set_fp`). En la siguiente carga consulta solo esas

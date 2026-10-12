@@ -1,14 +1,17 @@
 """Cliente WebDAV para Nextcloud (acceso directo, reemplaza los webhooks n8n).
 
-Lee la configuración de ``settings`` (NEXTCLOUD_BASE_URL / NEXTCLOUD_USER /
-NEXTCLOUD_APP_PASSWORD), que provienen de ``.env`` vía python-decouple.
+Configuración: el modelo ``NextcloudConfig`` (editable en el Panel) tiene precedencia
+campo a campo; cada campo vacío cae a ``settings`` (NEXTCLOUD_BASE_URL / NEXTCLOUD_USER /
+NEXTCLOUD_APP_PASSWORD, provenientes de ``.env``). La config efectiva se cachea 60 s
+(clave ``nc:config``); el Panel la invalida al guardar.
 
 Operaciones soportadas:
   - Lectura: PROPFIND → ``list_folder``, ``list_files``, ``tree``, ``folder_lastmod``;
     GET → ``download``.
   - Escritura controlada: ``mkcol`` / ``ensure_tree`` (crear carpetas), ``upload`` (PUT,
-    subidas del área ITO), ``delete`` (DELETE, solo tras aceptar una eliminación pendiente)
-    y ``move`` (MOVE sin sobrescribir, para renombrar según la plantilla).
+    subidas del área ITO), ``delete`` (DELETE, solo tras aceptar una eliminación pendiente),
+    ``move`` (MOVE sin sobrescribir, para renombrar según la plantilla) y ``copy`` (COPY
+    sin sobrescribir, para la copia renombrada de archivos de contratista al área ITO).
 
 Las rutas (``path``) son relativas a la raíz de archivos del usuario, p. ej.
 ``"/20 AJ/Sitio 1"``. Cada segmento se codifica para URL automáticamente.
@@ -20,6 +23,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 from django.conf import settings
+from django.core.cache import cache as _dj_cache
 
 _DAV = "{DAV:}"
 
@@ -39,16 +43,42 @@ class NextcloudNotConfigured(RuntimeError):
     """Faltan credenciales de Nextcloud en el entorno."""
 
 
+CONFIG_CACHE_KEY = "nc:config"
+
+
+def _db_config():
+    """Config efectiva {base_url, user, password}: campo de ``NextcloudConfig`` si no
+    está vacío, si no ``settings`` (.env). Cacheada 60 s para no consultar la BD en
+    cada llamada WebDAV; el Panel borra la clave al guardar."""
+    cfg = _dj_cache.get(CONFIG_CACHE_KEY)
+    if cfg is None:
+        row = None
+        try:
+            from .models import NextcloudConfig
+            row = NextcloudConfig.get()
+        except Exception:
+            pass
+        cfg = {
+            "base_url": (getattr(row, "base_url", "") or settings.NEXTCLOUD_BASE_URL or "").rstrip("/"),
+            "user": getattr(row, "usuario", "") or settings.NEXTCLOUD_USER,
+            "password": getattr(row, "app_password", "") or settings.NEXTCLOUD_APP_PASSWORD,
+        }
+        _dj_cache.set(CONFIG_CACHE_KEY, cfg, 60)
+    return cfg
+
+
 def is_configured():
-    return bool(_base_url() and settings.NEXTCLOUD_USER and settings.NEXTCLOUD_APP_PASSWORD)
+    cfg = _db_config()
+    return bool(cfg["base_url"] and cfg["user"] and cfg["password"])
 
 
 def _base_url():
-    return (settings.NEXTCLOUD_BASE_URL or "").rstrip("/")
+    return _db_config()["base_url"]
 
 
 def _auth():
-    return (settings.NEXTCLOUD_USER, settings.NEXTCLOUD_APP_PASSWORD)
+    cfg = _db_config()
+    return (cfg["user"], cfg["password"])
 
 
 def _norm(path):
@@ -60,7 +90,8 @@ def _url(path):
     """URL absoluta para una ruta relativa a la raíz del usuario."""
     if not is_configured():
         raise NextcloudNotConfigured(
-            "Configura NEXTCLOUD_BASE_URL, NEXTCLOUD_USER y NEXTCLOUD_APP_PASSWORD en .env."
+            "Configura Nextcloud en el Panel (pestaña Nextcloud) o vía "
+            "NEXTCLOUD_BASE_URL, NEXTCLOUD_USER y NEXTCLOUD_APP_PASSWORD en .env."
         )
     segments = [quote(seg) for seg in path.strip("/").split("/") if seg]
     suffix = "/".join(segments)
@@ -207,6 +238,19 @@ def download(path):
     return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
 
+def preview(path, size=320):
+    """Miniatura generada por Nextcloud (``core/preview``). Devuelve ``(bytes, content_type)``.
+    Lanza ``requests.HTTPError`` si el archivo no existe o no tiene vista previa."""
+    u = urlsplit(_base_url())
+    corte = u.path.find("/remote.php")
+    raiz = f"{u.scheme}://{u.netloc}{u.path[:corte] if corte >= 0 else ''}"
+    url = (f"{raiz}/index.php/core/preview.png?file={quote(_norm(path))}"
+           f"&x={int(size)}&y={int(size)}&a=1&mode=cover")
+    resp = requests.get(url, auth=_auth(), timeout=30)
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "image/png")
+
+
 def upload(path, contenido, content_type="application/octet-stream"):
     """Sube ``contenido`` (bytes) a ``path`` (WebDAV PUT). El padre debe existir.
     Devuelve el código HTTP (201 creado · 204 sobrescrito)."""
@@ -237,6 +281,21 @@ def move(src, dst):
     resp = requests.request(
         "MOVE", _url(src), auth=_auth(),
         headers={"Destination": _url(dst), "Overwrite": "F"}, timeout=60,
+    )
+    if resp.status_code == 412:
+        raise DestinoExiste(f"Ya existe un archivo llamado «{dst.rsplit('/', 1)[-1]}».")
+    if resp.status_code in (201, 204):
+        return resp.status_code
+    resp.raise_for_status()
+    return resp.status_code
+
+
+def copy(src, dst):
+    """Copia un archivo (WebDAV COPY) sin sobrescribir: si ``dst`` ya existe lanza
+    :class:`DestinoExiste`. Devuelve el código HTTP (201 · 204)."""
+    resp = requests.request(
+        "COPY", _url(src), auth=_auth(),
+        headers={"Destination": _url(dst), "Overwrite": "F"}, timeout=120,
     )
     if resp.status_code == 412:
         raise DestinoExiste(f"Ya existe un archivo llamado «{dst.rsplit('/', 1)[-1]}».")

@@ -1,4 +1,14 @@
 {% load static %}
+{% if request.usuario_real %}
+<div class="bg-warning text-warning-content text-sm px-4 py-1.5 flex items-center justify-center gap-3">
+    <i class="fa-solid fa-user-secret"></i>
+    <span>Viendo como <strong>{{ user.username }}</strong> (tú: {{ request.usuario_real.username }})</span>
+    <form method="post" action="{% url 'accounts:volver' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-xs btn-neutral">Volver a mi cuenta</button>
+    </form>
+</div>
+{% endif %}
 <header class="navbar bg-base-100 border-b border-base-300">
     <div class="flex-1 flex items-center gap-2">
         <a href="{% url 'home' %}" class="btn btn-ghost px-2">
@@ -18,8 +28,11 @@
         {% if user.is_superuser or user.profile.acceso_finales %}
         <a href="{% url 'docs:final' %}" class="btn btn-ghost btn-sm {% if request.resolver_match.url_name == 'final' and request.resolver_match.app_name == 'docs' %}btn-active{% endif %}">Docs. Finales</a>
         {% endif %}
-        {% if user.is_superuser or user.profile.acceso_seguimiento %}
-        <a href="{% url 'docs:seguimiento' %}" class="btn btn-ghost btn-sm {% if request.resolver_match.url_name == 'seguimiento' and request.resolver_match.app_name == 'docs' %}btn-active{% endif %}">Seguimiento</a>
+        {% if user.is_superuser %}
+        <a href="{% url 'docs:seguimiento' %}" class="btn btn-ghost btn-sm {% if request.resolver_match.url_name == 'seguimiento' and request.resolver_match.app_name == 'docs' %}btn-active{% endif %}">Seguimiento old</a>
+        {% endif %}
+        {% if user.is_superuser or user.profile.acceso_proyectos %}
+        <a href="{% url 'proyectos:index' %}" class="btn btn-ghost btn-sm {% if request.resolver_match.app_name == 'proyectos' %}btn-active{% endif %}">Seguimiento</a>
         {% endif %}
         {% if user.is_superuser %}
         <a href="{% url 'panel:index' %}" class="btn btn-ghost btn-sm {% if request.resolver_match.app_name == 'panel' %}btn-active{% endif %}">Panel</a>

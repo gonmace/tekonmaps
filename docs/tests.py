@@ -2,7 +2,7 @@ import json
 from unittest import mock
 
 from django.core.cache import cache
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from django.contrib.auth.models import User
@@ -117,6 +117,11 @@ class EstadoSitioTests(TestCase):
         self.assertEqual(docs["WPH-Trabajo en Altura"]["estado"], "falta")
         # El archivo que no coincide con ningún documento aparece en inesperados.
         self.assertEqual([x["nombre"] for x in est["inesperados"]], ["notas varias.pdf"])
+        # Solo lectura: "20 AJ" está sembrada como carpeta de contratista (mig. 0044);
+        # el flag se calcula sobre la base del sitio ("/20 AJ/Sitio 1" → root "/20 AJ").
+        archivo = docs["REGISTRO TX/TSS"]["archivos"][0]
+        self.assertTrue(archivo["solo_lectura"])
+        self.assertTrue(est["inesperados"][0]["solo_lectura"])
 
     def test_confirmacion_de_rol_aparece_en_estado(self):
         d1 = DocumentoEsperado.objects.get(nombre="REGISTRO TX/TSS")
@@ -383,6 +388,7 @@ class RolConsolidadoTests(TestCase):
         self.assertTrue(_es_coordinador(sup))
 
 
+@override_settings(SEGUIMIENTO_OLD_SOLO_SUPERUSER=False)  # prueban la lógica por rol
 class RevisionYBorradoTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -424,13 +430,15 @@ class RevisionYBorradoTests(TestCase):
         self.assertEqual(r.status_code, 400)
 
     def test_eliminar_marca_no_borra(self):
+        # Área ITO: los archivos de contratista (/20 AJ/…) son de solo lectura.
         self.client.force_login(self.ito)
+        path = "/20-ITO_SEGUIMIENTO/S1/f.pdf"
         with mock.patch.object(nextcloud, "delete") as deleted:
             r = self._post("docs:eliminar_archivo",
-                           {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf"})
+                           {"empresa": "AJ", "sitio": "S1", "path": path})
         self.assertEqual(r.status_code, 200)
         deleted.assert_not_called()
-        self.assertTrue(EliminacionPendiente.objects.filter(path="/20 AJ/S1/f.pdf").exists())
+        self.assertTrue(EliminacionPendiente.objects.filter(path=path).exists())
 
     def test_aceptar_requiere_coordinador(self):
         self.client.force_login(self.ito)  # rol_ito_hse, no coordinador
@@ -444,13 +452,14 @@ class RevisionYBorradoTests(TestCase):
 
     def test_aceptar_eliminacion_borra(self):
         self.client.force_login(self.coord)
-        EliminacionPendiente.objects.create(empresa="AJ", sitio="S1", path="/20 AJ/S1/f.pdf")
+        path = "/20-ITO_SEGUIMIENTO/S1/f.pdf"
+        EliminacionPendiente.objects.create(empresa="AJ", sitio="S1", path=path)
         with mock.patch.object(nextcloud, "delete", return_value=204) as deleted:
             r = self._post("docs:aceptar_eliminacion",
-                           {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf"})
+                           {"empresa": "AJ", "sitio": "S1", "path": path})
         self.assertEqual(r.status_code, 200)
         deleted.assert_called_once()
-        self.assertFalse(EliminacionPendiente.objects.filter(path="/20 AJ/S1/f.pdf").exists())
+        self.assertFalse(EliminacionPendiente.objects.filter(path=path).exists())
 
     def test_rechazar_quita_marca_sin_borrar(self):
         self.client.force_login(self.coord)
@@ -492,7 +501,8 @@ class RevisionYBorradoTests(TestCase):
         eliminación pendiente) siguen al archivo con su ruta nueva."""
         from docs.models import AsignacionArchivo
         self.client.force_login(self.ito)
-        viejo, nuevo = "/20 AJ/S1/borrador final v3.pdf", "/20 AJ/S1/PTI-CL-AA-0001.pdf"
+        viejo = "/20-ITO_SEGUIMIENTO/S1/borrador final v3.pdf"
+        nuevo = "/20-ITO_SEGUIMIENTO/S1/PTI-CL-AA-0001.pdf"
         AsignacionArchivo.objects.create(empresa="AJ", sitio="S1", path=viejo, documento=self.doc)
         EliminacionPendiente.objects.create(empresa="AJ", sitio="S1", path=viejo)
         with mock.patch.object(nextcloud, "move", return_value=201) as moved:
@@ -509,23 +519,24 @@ class RevisionYBorradoTests(TestCase):
     def test_renombrar_sanea_el_nombre_y_no_sale_de_la_carpeta(self):
         """Barras y '..' en el nombre se sanean: el destino queda en la misma carpeta."""
         self.client.force_login(self.ito)
+        base = "/20-ITO_SEGUIMIENTO/S1/"
         with mock.patch.object(nextcloud, "move", return_value=201) as moved:
             r = self._post("docs:renombrar_archivo",
-                           {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf",
+                           {"empresa": "AJ", "sitio": "S1", "path": base + "f.pdf",
                             "nombre": "../../otro/x.pdf"})
         self.assertEqual(r.status_code, 200)
         destino = moved.call_args.args[1]
-        self.assertTrue(destino.startswith("/20 AJ/S1/"))
+        self.assertTrue(destino.startswith(base))
         # Sin barras en el nombre final: no puede salir de la carpeta.
-        self.assertNotIn("/", destino[len("/20 AJ/S1/"):])
+        self.assertNotIn("/", destino[len(base):])
 
     def test_renombrar_destino_existente_da_409(self):
         self.client.force_login(self.ito)
         with mock.patch.object(nextcloud, "move",
                                side_effect=nextcloud.DestinoExiste("Ya existe.")):
             r = self._post("docs:renombrar_archivo",
-                           {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf",
-                            "nombre": "f2.pdf"})
+                           {"empresa": "AJ", "sitio": "S1",
+                            "path": "/20-ITO_SEGUIMIENTO/S1/f.pdf", "nombre": "f2.pdf"})
         self.assertEqual(r.status_code, 409)
 
     def test_renombrar_requiere_rol_y_acceso_al_sitio(self):
@@ -546,6 +557,103 @@ class RevisionYBorradoTests(TestCase):
         moved.assert_not_called()
 
 
+@override_settings(SEGUIMIENTO_OLD_SOLO_SUPERUSER=False)  # prueban la lógica por rol
+class ContratistasSoloLecturaTests(TestCase):
+    """Los archivos bajo carpetas raíz marcadas como contratista (CarpetaRaiz, sembradas
+    por la migración 0044) son de solo lectura: no se renombran ni se borran. La vía es la
+    copia renombrada al área ITO (WebDAV COPY + vínculo CopiaRenombrada)."""
+
+    def setUp(self):
+        cache.clear()
+        self.plantilla = PlantillaEstructura.get_default()
+        self.doc = DocumentoEsperado.objects.create(
+            plantilla=self.plantilla, etapa="02_CALIDAD_OOCC", nombre="Doc calidad",
+            codigo="CL-XX-0000-COC", orden=1, rol_ito="ELABORAR")
+        self.ito = User.objects.create_user("ito_rw", password="x")
+        UserProfile.objects.create(user=self.ito, rol="rol_ito")
+        self.coord = User.objects.create_user("coord_rw", password="x")
+        UserProfile.objects.create(user=self.coord, rol="rol_coordinador")
+        for u in (self.ito, self.coord):
+            AccesoSitio.objects.create(user=u, empresa="AJ", sitio="S1")
+        self.client = Client()
+
+    def _post(self, name, body):
+        return self.client.post(reverse(name), data=json.dumps(body),
+                                content_type="application/json")
+
+    def test_renombrar_archivo_contratista_da_403(self):
+        self.client.force_login(self.ito)
+        with mock.patch.object(nextcloud, "move") as moved:
+            r = self._post("docs:renombrar_archivo",
+                           {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf",
+                            "nombre": "f2.pdf"})
+        self.assertEqual(r.status_code, 403)
+        moved.assert_not_called()
+
+    def test_eliminar_archivo_contratista_da_403(self):
+        self.client.force_login(self.ito)
+        r = self._post("docs:eliminar_archivo",
+                       {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf"})
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(EliminacionPendiente.objects.exists())
+
+    def test_aceptar_eliminacion_contratista_da_403(self):
+        """Ni una marca legacy permite borrar de Nextcloud un archivo de contratista."""
+        self.client.force_login(self.coord)
+        EliminacionPendiente.objects.create(empresa="AJ", sitio="S1", path="/20 AJ/S1/f.pdf")
+        with mock.patch.object(nextcloud, "delete") as deleted:
+            r = self._post("docs:aceptar_eliminacion",
+                           {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf"})
+        self.assertEqual(r.status_code, 403)
+        deleted.assert_not_called()
+
+    def test_dedup_montaje_duplicado_tambien_es_contratista(self):
+        from docs import seguimiento
+        self.assertTrue(seguimiento.es_path_contratista("/20 AJ (2)/S1/f.pdf"))
+        self.assertFalse(seguimiento.es_path_contratista("/20-ITO_SEGUIMIENTO/S1/f.pdf"))
+
+    def test_copiar_renombrado_crea_copia_asignacion_y_vinculo(self):
+        from docs.models import AsignacionArchivo, CopiaRenombrada
+        self.client.force_login(self.ito)
+        original = "/20 AJ/S1/escaneo final v2.pdf"
+        with mock.patch.object(nextcloud, "ensure_tree") as tree, \
+                mock.patch.object(nextcloud, "copy", return_value=201) as copied:
+            r = self._post("docs:copiar_renombrado",
+                           {"empresa": "AJ", "sitio": "S1", "path": original,
+                            "nombre": "CL-AA-0001-COC.pdf", "doc_id": self.doc.id})
+        self.assertEqual(r.status_code, 200)
+        destino = r.json()["path"]
+        self.assertTrue(destino.startswith("/20-ITO_SEGUIMIENTO/S1/"))
+        self.assertTrue(destino.endswith("/CL-AA-0001-COC.pdf"))
+        tree.assert_called_once()
+        copied.assert_called_once_with(original, destino)
+        self.assertTrue(AsignacionArchivo.objects.filter(
+            path=destino, documento=self.doc).exists())
+        vinculo = CopiaRenombrada.objects.get(empresa="AJ", sitio="S1", path_copia=destino)
+        self.assertEqual(vinculo.path_original, original)
+
+    def test_copiar_renombrado_rechaza_paths_del_area_ito(self):
+        self.client.force_login(self.ito)
+        with mock.patch.object(nextcloud, "copy") as copied:
+            r = self._post("docs:copiar_renombrado",
+                           {"empresa": "AJ", "sitio": "S1",
+                            "path": "/20-ITO_SEGUIMIENTO/S1/f.pdf",
+                            "nombre": "f2.pdf", "doc_id": self.doc.id})
+        self.assertEqual(r.status_code, 400)
+        copied.assert_not_called()
+
+    def test_copiar_renombrado_destino_existente_da_409(self):
+        self.client.force_login(self.ito)
+        with mock.patch.object(nextcloud, "ensure_tree"), \
+                mock.patch.object(nextcloud, "copy",
+                                  side_effect=nextcloud.DestinoExiste("Ya existe.")):
+            r = self._post("docs:copiar_renombrado",
+                           {"empresa": "AJ", "sitio": "S1", "path": "/20 AJ/S1/f.pdf",
+                            "nombre": "f2.pdf", "doc_id": self.doc.id})
+        self.assertEqual(r.status_code, 409)
+
+
+@override_settings(SEGUIMIENTO_OLD_SOLO_SUPERUSER=False)  # prueban la lógica por rol
 class OcultarFotosTests(TestCase):
     """Soft-delete reversible de fotos en una galería (ArchivoOculto): nunca toca Nextcloud."""
 
@@ -657,3 +765,155 @@ class ZonaHorariaTests(TestCase):
             self.assertEqual(_format_fecha(dt), '31 dic 2024')
         with timezone.override('UTC'):
             self.assertEqual(_format_fecha(dt), '01 ene 2025')
+
+
+class NextcloudConfigTests(TestCase):
+    """Config de Nextcloud: la fila de BD (NextcloudConfig) tiene precedencia campo a
+    campo sobre settings (.env); vacío = cae al .env. Cacheada bajo 'nc:config'."""
+
+    def setUp(self):
+        cache.delete(nextcloud.CONFIG_CACHE_KEY)
+
+    def tearDown(self):
+        cache.delete(nextcloud.CONFIG_CACHE_KEY)
+
+    def test_sin_fila_usa_settings(self):
+        from django.test import override_settings
+        with override_settings(NEXTCLOUD_BASE_URL="https://env/dav/",
+                               NEXTCLOUD_USER="envuser",
+                               NEXTCLOUD_APP_PASSWORD="envpass"):
+            cfg = nextcloud._db_config()
+        self.assertEqual(cfg["base_url"], "https://env/dav")
+        self.assertEqual(cfg["user"], "envuser")
+        self.assertEqual(cfg["password"], "envpass")
+
+    def test_fila_de_bd_tiene_precedencia_campo_a_campo(self):
+        from django.test import override_settings
+        from docs.models import NextcloudConfig
+        NextcloudConfig.objects.create(base_url="https://db/dav/", usuario="dbuser",
+                                       app_password="")  # password vacío → .env
+        with override_settings(NEXTCLOUD_BASE_URL="https://env/dav/",
+                               NEXTCLOUD_USER="envuser",
+                               NEXTCLOUD_APP_PASSWORD="envpass"):
+            cfg = nextcloud._db_config()
+        self.assertEqual(cfg["base_url"], "https://db/dav")
+        self.assertEqual(cfg["user"], "dbuser")
+        self.assertEqual(cfg["password"], "envpass")
+
+
+# En tests no se corre collectstatic (no hay manifest de WhiteNoise): storage simple
+# para poder renderizar plantillas completas con {% static %}.
+_PLAIN_STATIC = override_settings(STORAGES={
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+})
+
+
+@_PLAIN_STATIC
+class PanelNextcloudTests(TestCase):
+    """Pestaña Nextcloud del panel: sync de carpetas y toggles."""
+
+    def setUp(self):
+        cache.clear()
+        self.su = User.objects.create_superuser("root@x.cl", "root@x.cl", "x")
+        self.client = Client()
+        self.client.force_login(self.su)
+
+    def test_pagina_renderiza(self):
+        r = self.client.get(reverse("panel:nextcloud"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "20 AJ")  # sembrada por la migración 0044
+
+    def test_sincronizar_agrega_sin_borrar_dedup_y_excluye_ito(self):
+        from docs.models import CarpetaRaiz
+        items = [
+            {"nombre": "20 AJ", "es_dir": True},          # ya existe
+            {"nombre": "20 PROSANGES", "es_dir": True},   # nueva
+            {"nombre": "20 PROSANGES (2)", "es_dir": True},  # montaje duplicado
+            {"nombre": "20-ITO_SEGUIMIENTO", "es_dir": True},  # área ITO: excluida
+            {"nombre": "30 OTRA", "es_dir": True},        # no empieza con 20
+            {"nombre": "20 archivo.txt", "es_dir": False},
+        ]
+        with mock.patch.object(nextcloud, "list_folder", return_value=items):
+            r = self.client.post(reverse("panel:nextcloud_sincronizar"))
+        self.assertEqual(r.status_code, 302)
+        carpetas = set(CarpetaRaiz.objects.values_list("carpeta", flat=True))
+        self.assertIn("20 PROSANGES", carpetas)
+        self.assertIn("20 AJ", carpetas)          # no se borró
+        self.assertNotIn("20 PROSANGES (2)", carpetas)
+        self.assertNotIn("20-ITO_SEGUIMIENTO", carpetas)
+        self.assertNotIn("30 OTRA", carpetas)
+        nueva = CarpetaRaiz.objects.get(carpeta="20 PROSANGES")
+        self.assertEqual(nueva.codigo, "PROSANGES")
+        self.assertTrue(nueva.escanear)
+        self.assertFalse(nueva.es_contratista)  # se marca a mano en el panel
+
+    def test_toggle_contratista_cambia_solo_lectura(self):
+        from docs.models import CarpetaRaiz
+        c = CarpetaRaiz.objects.get(carpeta="20 AJ")
+        self.assertTrue(seguimiento.es_path_contratista("/20 AJ/S1/f.pdf"))
+        self.client.post(reverse("panel:carpeta_toggle", args=[c.pk, "contratista"]))
+        self.assertFalse(seguimiento.es_path_contratista("/20 AJ/S1/f.pdf"))
+
+    def test_toggle_escanear_saca_el_root_del_escaneo(self):
+        from docs.models import CarpetaRaiz
+        c = CarpetaRaiz.objects.get(carpeta="20 MER")
+        self.assertIn("/20 MER", seguimiento.roots_constructora())
+        self.client.post(reverse("panel:carpeta_toggle", args=[c.pk, "escanear"]))
+        self.assertNotIn("/20 MER", seguimiento.roots_constructora())
+        # Y también desaparece del selector de empresas (get_all exige escanear).
+        self.assertNotIn("MER", [x.nombre for x in company_loader.get_all()])
+
+    def test_empresas_sin_prefijo_20(self):
+        nombres = [c.nombre_display for c in company_loader.get_all()]
+        self.assertIn("AJ", nombres)
+        self.assertTrue(all(not n.startswith("20") for n in nombres))
+
+
+@_PLAIN_STATIC
+class PanelAgregarQuitarCarpetasTests(TestCase):
+    """Agregar/quitar carpetas del escaneo desde el panel Nextcloud."""
+
+    def setUp(self):
+        cache.clear()
+        self.su = User.objects.create_superuser("root2@x.cl", "root2@x.cl", "x")
+        self.client = Client()
+        self.client.force_login(self.su)
+
+    def test_disponibles_excluye_configuradas_e_ito(self):
+        items = [
+            {"nombre": "20 AJ", "es_dir": True},            # ya configurada (semilla)
+            {"nombre": "20 NUEVA", "es_dir": True},
+            {"nombre": "20 NUEVA (2)", "es_dir": True},      # montaje duplicado
+            {"nombre": "OTRA CARPETA", "es_dir": True},      # sin prefijo 20: también se ofrece
+            {"nombre": "20-ITO_SEGUIMIENTO", "es_dir": True},
+            {"nombre": "suelto.txt", "es_dir": False},
+        ]
+        with mock.patch.object(nextcloud, "list_folder", return_value=items):
+            r = self.client.get(reverse("panel:carpetas_disponibles"))
+        self.assertEqual(r.json()["carpetas"], ["20 NUEVA", "OTRA CARPETA"])
+
+    def test_agregar_carpeta_queda_escaneada(self):
+        from docs.models import CarpetaRaiz
+        r = self.client.post(reverse("panel:carpeta_crear"), {"carpeta": "20 NUEVA"})
+        self.assertEqual(r.status_code, 302)
+        c = CarpetaRaiz.objects.get(carpeta="20 NUEVA")
+        self.assertTrue(c.escanear)
+        self.assertEqual(c.codigo, "NUEVA")
+        self.assertIn("/20 NUEVA", seguimiento.roots_constructora())
+
+    def test_agregar_rechaza_nombres_invalidos(self):
+        from docs.models import CarpetaRaiz
+        for malo in ("", "a/b", "  /  "):
+            self.client.post(reverse("panel:carpeta_crear"), {"carpeta": malo})
+        self.assertEqual(CarpetaRaiz.objects.exclude(
+            carpeta__in=["20 AJ", "20 MER", "20 GH3"]).count(), 0)
+
+    def test_quitar_carpeta_sale_del_escaneo(self):
+        from docs.models import CarpetaRaiz
+        c = CarpetaRaiz.objects.get(carpeta="20 GH3")
+        self.assertIn("/20 GH3", seguimiento.roots_constructora())
+        r = self.client.post(reverse("panel:carpeta_eliminar", args=[c.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(CarpetaRaiz.objects.filter(carpeta="20 GH3").exists())
+        self.assertNotIn("/20 GH3", seguimiento.roots_constructora())

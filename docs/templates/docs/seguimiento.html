@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Seguimiento — Tk Redline{% endblock %}
+{% block title %}Seguimiento old — Tk Redline{% endblock %}
 
 {% block header %}{% include 'header.html' %}{% endblock %}
 
@@ -76,7 +76,8 @@
 
   <dialog id="modal-renombrar" class="modal">
     <div class="modal-box">
-      <h3 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-wand-magic-sparkles text-info"></i> Renombrar archivo</h3>
+      <h3 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-wand-magic-sparkles text-info"></i> <span id="ren-titulo">Renombrar archivo</span></h3>
+      <p id="ren-copiar-nota" class="hidden text-xs text-info mt-1"><i class="fa-solid fa-clone"></i> El original del contratista no se toca: se crea una copia en el área ITO con el nombre indicado.</p>
       <p id="ren-actual" class="text-sm text-base-content/60 mt-1 mb-3 break-all"></p>
       <div id="ren-fecha-row" class="hidden items-center gap-2 mb-3">
         <label for="ren-fecha" class="text-sm text-base-content/70 flex items-center gap-1">
@@ -91,7 +92,7 @@
       </div>
       <div class="modal-action">
         <form method="dialog"><button class="btn btn-ghost btn-sm">Cancelar</button></form>
-        <button id="ren-ok" class="btn btn-info btn-sm gap-1"><i class="fa-solid fa-check"></i> Renombrar</button>
+        <button id="ren-ok" class="btn btn-info btn-sm gap-1"><i class="fa-solid fa-check"></i> <span id="ren-ok-label">Renombrar</span></button>
       </div>
     </div>
     <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
@@ -274,6 +275,7 @@
   const RESTAURAR_URL = "{% url 'docs:restaurar_archivo' %}";
   const ASIGNAR_URL = "{% url 'docs:asignar_archivo' %}";
   const RENOMBRAR_URL = "{% url 'docs:renombrar_archivo' %}";
+  const COPIAR_URL = "{% url 'docs:copiar_renombrado' %}";
   const DESASIGNAR_URL = "{% url 'docs:desasignar_archivo' %}";
   const API_CARPETAS20 = "{% url 'docs:api_carpetas20' %}";
   const REFRESH_CARPETA_URL = "{% url 'docs:refrescar_carpeta' %}";
@@ -298,7 +300,8 @@
     const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
     return m ? decodeURIComponent(m.pop()) : '';
   }
-  const CSRF = getCookie('csrftoken');
+  // Token del render (no de la cookie): independiente del nombre de cookie del proyecto.
+  const CSRF = '{{ csrf_token }}';
 
   const empresaSel = document.getElementById('empresa-select');
   const sitioSel = document.getElementById('sitio-select');
@@ -333,7 +336,8 @@
     const empresa = empresaSel.value;
     sitioSel.innerHTML = '<option value="">Cargando…</option>';
     try {
-      const r = await fetch(API_SITIOS + '?empresa=' + encodeURIComponent(empresa));
+      // sinc=1: los no-superusers solo ven sitios ya sincronizados por el administrador.
+      const r = await fetch(API_SITIOS + '?empresa=' + encodeURIComponent(empresa) + '&sinc=1');
       const data = await r.json();
       const sitios = data.sitios || [];
       sitioSel.innerHTML = '<option value="">Selecciona un sitio…</option>' +
@@ -556,27 +560,39 @@
       let acc = '';
       if (x.pendiente_eliminar) {
         // Marcado para borrado: el Coordinador/superusuario acepta (✓) o rechaza (↩).
+        // Marcas legacy sobre archivos de contratista: solo se puede rechazar.
         acc = ES_COORDINADOR
-          ? `<button type="button" class="js-elim-ok text-success hover:opacity-70 shrink-0" ${datos} title="Aceptar borrado (elimina de Nextcloud)"><i class="fa-solid fa-check"></i></button>
+          ? `${x.solo_lectura ? '' : `<button type="button" class="js-elim-ok text-success hover:opacity-70 shrink-0" ${datos} title="Aceptar borrado (elimina de Nextcloud)"><i class="fa-solid fa-check"></i></button>`}
              <button type="button" class="js-elim-no text-base-content/50 hover:opacity-70 shrink-0" ${datos} title="Rechazar borrado (conservar)"><i class="fa-solid fa-rotate-left"></i></button>`
           : `<span class="text-warning shrink-0" title="Pendiente de borrado — espera al Coordinador"><i class="fa-solid fa-xmark"></i></span>`;
-      } else if (ES_ADMIN) {
+      } else if (ES_ADMIN && !x.solo_lectura) {
         acc = `<button type="button" class="js-del text-delete hover:opacity-70 shrink-0" ${datos} title="Marcar para borrado"><i class="fa-solid fa-trash-can text-xs"></i></button>`;
       }
       // Desasignar: solo en archivos asignados a mano (el inverso de "Asignar a…").
       const desasig = (ES_ADMIN && x.asignado && !x.pendiente_eliminar)
         ? `<button type="button" class="js-desasignar text-base-content/50 hover:text-warning shrink-0" ${datos} title="Quitar asignación manual"><i class="fa-solid fa-link-slash text-xs"></i></button>`
         : '';
-      // Renombrar según la plantilla (varita, como la sugerencia del modal de subida).
-      // Solo en documentos con código de plantilla: sin él no hay nombre que sugerir.
-      const renom = (ES_ADMIN && !x.pendiente_eliminar && d.codigo)
-        ? `<button type="button" class="js-renombrar text-base-content/50 hover:text-info shrink-0" data-doc="${d.id}" ${datos} title="Renombrar según la plantilla"><i class="fa-solid fa-wand-magic-sparkles text-xs"></i></button>`
-        : '';
+      // Varita (solo documentos con código de plantilla, sin él no hay nombre que sugerir):
+      //  - archivo de contratista (solo lectura): COPIA renombrada al área ITO
+      //    (oculta si ya tiene copia);
+      //  - archivo del área ITO / editable: renombrar in-place.
+      let renom = '';
+      if (ES_ADMIN && !x.pendiente_eliminar && d.codigo) {
+        renom = x.solo_lectura
+          ? (x.tiene_copia ? '' : `<button type="button" class="js-copiar text-base-content/50 hover:text-info shrink-0" data-doc="${d.id}" ${datos} title="Copiar renombrado al área ITO (el original no se toca)"><i class="fa-solid fa-wand-magic-sparkles text-xs"></i></button>`)
+          : `<button type="button" class="js-renombrar text-base-content/50 hover:text-info shrink-0" data-doc="${d.id}" ${datos} title="Renombrar según la plantilla"><i class="fa-solid fa-wand-magic-sparkles text-xs"></i></button>`;
+      }
+      // Vínculo original↔copia renombrada.
+      const copiaMark = x.copia_de
+        ? ` <i class="fa-solid fa-clone text-[10px] text-info" title="Copia renombrada de ${escapeHtml(x.copia_de)}"></i>`
+        : (x.tiene_copia
+          ? ' <i class="fa-regular fa-clone text-[10px] text-base-content/40" title="Ya tiene copia renombrada en el área ITO"></i>'
+          : '');
       const nameCls = x.pendiente_eliminar ? 'line-through text-base-content/40' : 'link link-info';
       const asigMark = x.asignado ? ' <i class="fa-solid fa-link text-[10px] text-base-content/30" title="Asignado manualmente"></i>' : '';
-      const tipArchivo = `${escapeHtml(x.path)}\n${x.origen === 'constructor' ? 'Archivo Constructora' : 'Cargado TKR'}`;
+      const tipArchivo = `${escapeHtml(x.path)}\n${x.origen === 'constructor' ? 'Archivo Constructora' : 'Cargado TKR'}${x.solo_lectura ? '\nSolo lectura (contratista)' : ''}`;
       return `<div class="flex items-center gap-2">
-        <a href="${ARCHIVO_URL}?path=${encodeURIComponent(x.path)}" target="_blank" class="text-xs ${nameCls} whitespace-nowrap" title="${tipArchivo}">${ORIGEN_ICONO[x.origen] || ''} ${escapeHtml(x.nombre)}</a>${asigMark}
+        <a href="${ARCHIVO_URL}?path=${encodeURIComponent(x.path)}" target="_blank" class="text-xs ${nameCls} whitespace-nowrap" title="${tipArchivo}">${ORIGEN_ICONO[x.origen] || ''} ${escapeHtml(x.nombre)}</a>${asigMark}${copiaMark}
         ${renom}${desasig}${acc}
       </div>`;
     }).join('');
@@ -1147,6 +1163,8 @@
     if (desasig) { desasignarArchivo(desasig.dataset.path, desasig.dataset.nombre); return; }
     const renom = ev.target.closest('.js-renombrar');
     if (renom) { abrirModalRenombrar(renom.dataset.doc, renom.dataset.path); return; }
+    const copiar = ev.target.closest('.js-copiar');
+    if (copiar) { abrirModalRenombrar(copiar.dataset.doc, copiar.dataset.path, true); return; }
     const elimOk = ev.target.closest('.js-elim-ok');
     if (elimOk) { aceptarEliminacion(elimOk.dataset.path, elimOk.dataset.nombre); return; }
     const elimNo = ev.target.closest('.js-elim-no');
@@ -1524,12 +1542,17 @@
     return nombrePlantilla(_ren.codigo, _ren.nombre, _ren.num, fechaDDMMAA('ren-fecha'));
   }
 
-  function abrirModalRenombrar(docId, path) {
+  function abrirModalRenombrar(docId, path, copiar = false) {
     const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(docId));
     const idx = doc ? (doc.archivos || []).findIndex(a => a.path === path) : -1;
     if (idx < 0) return;
     const archivo = doc.archivos[idx];
-    _ren = { docId, path, nombre: archivo.nombre, codigo: doc.codigo || '', num: idx + 1 };
+    _ren = { docId, path, nombre: archivo.nombre, codigo: doc.codigo || '', num: idx + 1, copiar };
+    // Modo copia (archivo de contratista, solo lectura): mismo modal, otra acción.
+    document.getElementById('ren-titulo').textContent =
+      copiar ? 'Copiar renombrado al área ITO' : 'Renombrar archivo';
+    document.getElementById('ren-ok-label').textContent = copiar ? 'Copiar' : 'Renombrar';
+    document.getElementById('ren-copiar-nota').classList.toggle('hidden', !copiar);
     // El calendario solo aplica a documentos con secuencia '(XX00)' (igual que al subir).
     const usaFecha = _ren.codigo.includes('(XX00)');
     const row = document.getElementById('ren-fecha-row');
@@ -1551,27 +1574,42 @@
   document.getElementById('ren-ok').addEventListener('click', async () => {
     if (!_ren) return;
     const nombre = document.getElementById('ren-nombre').value.trim();
-    if (!nombre || nombre === _ren.nombre) { modalRenombrar.close(); return; }
+    if (!nombre || (!_ren.copiar && nombre === _ren.nombre)) { modalRenombrar.close(); return; }
     const okBtn = document.getElementById('ren-ok');
     okBtn.disabled = true;
     try {
-      const r = await fetch(RENOMBRAR_URL, {
+      const url = _ren.copiar ? COPIAR_URL : RENOMBRAR_URL;
+      const body = { empresa: CUR_EMP, sitio: CUR_SITIO, path: _ren.path, nombre };
+      if (_ren.copiar) body.doc_id = _ren.docId;
+      const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-        body: JSON.stringify({ empresa: CUR_EMP, sitio: CUR_SITIO, path: _ren.path, nombre }),
+        body: JSON.stringify(body),
       });
       const data = await r.json();
-      if (!r.ok) { window.Alert && window.Alert.error(data.error || 'No se pudo renombrar'); return; }
+      if (!r.ok) { window.Alert && window.Alert.error(data.error || (_ren.copiar ? 'No se pudo copiar' : 'No se pudo renombrar')); return; }
       modalRenombrar.close();
-      window.Alert && window.Alert.success(`Archivo renombrado a “${data.nombre}”`, { autoHide: 5000 });
-      // AJAX: actualizo nombre/path en memoria y re-renderizo (sin reconsultar Nextcloud).
+      // AJAX: actualizo la memoria y re-renderizo (sin reconsultar Nextcloud).
       const doc = DATOS && (DATOS.documentos || []).find(d => String(d.id) === String(_ren.docId));
-      const a = doc && (doc.archivos || []).find(x => x.path === _ren.path);
-      if (a) { a.path = data.path; a.nombre = data.nombre; ordenarArchivos(doc); }
+      if (_ren.copiar) {
+        window.Alert && window.Alert.success(`Copia creada en el área ITO: “${data.nombre}”`, { autoHide: 5000 });
+        const orig = doc && (doc.archivos || []).find(x => x.path === _ren.path);
+        if (orig) orig.tiene_copia = true;
+        if (doc) {
+          doc.archivos.push({ nombre: data.nombre, path: data.path, fecha: '', origen: 'ito',
+                              pendiente_eliminar: false, oculto: false, asignado: true,
+                              solo_lectura: false, copia_de: _ren.path, tiene_copia: false });
+          ordenarArchivos(doc);
+        }
+      } else {
+        window.Alert && window.Alert.success(`Archivo renombrado a “${data.nombre}”`, { autoHide: 5000 });
+        const a = doc && (doc.archivos || []).find(x => x.path === _ren.path);
+        if (a) { a.path = data.path; a.nombre = data.nombre; ordenarArchivos(doc); }
+      }
       if (DATOS) render(DATOS);
       _ren = null;
     } catch (e) {
-      window.Alert && window.Alert.error(e.message || 'Error al renombrar');
+      window.Alert && window.Alert.error(e.message || 'Error');
     } finally {
       okBtn.disabled = false;
     }

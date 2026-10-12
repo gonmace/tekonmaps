@@ -7,12 +7,15 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 
-from docs import company_loader, seguimiento
+from django.conf import settings
+
+from docs import company_loader, nextcloud, seguimiento
 from docs.models import (
     AccesoSitio,
+    CarpetaRaiz,
     DocumentoEsperado,
-    EmpresaLink,
     EstructuraCache,
+    NextcloudConfig,
     PlantillaEstructura,
     ProyectoFinalCache,
     ROLES_TODO_SITIO,
@@ -24,8 +27,9 @@ from docs.models import (
 )
 
 from .forms import (
+    CarpetaRaizForm,
     DocumentoEsperadoForm,
-    EmpresaLinkForm,
+    NextcloudConfigForm,
     PlantillaEstructuraForm,
     SiteConfigForm,
     UserCreateForm,
@@ -58,7 +62,7 @@ def index(request):
     return render(request, 'panel/index.html', {
         'titulo_pagina': 'Panel',
         'seccion': 'index',
-        'n_empresas': EmpresaLink.objects.count(),
+        'n_empresas': CarpetaRaiz.objects.filter(es_contratista=True).count(),
         'n_sitios': SiteConfig.objects.count(),
         'n_usuarios': User.objects.count(),
         'n_documentos': DocumentoEsperado.objects.count(),
@@ -70,48 +74,176 @@ def index(request):
     })
 
 
-# ── Empresas (EmpresaLink) ──────────────────────────────────────────────────────
+# ── Nextcloud (NextcloudConfig + CarpetaRaiz) ───────────────────────────────────
+def _invalidar_carpetas():
+    """Cambiar las carpetas raíz (toggles/sync/eliminar) altera las fuentes del
+    seguimiento: se purgan los snapshots y toda la caché (firmas del fast-path
+    incluidas). Evento raro de administración; la próxima carga re-escanea."""
+    SeguimientoCache.objects.all().delete()
+    cache.clear()
+
+
 @superuser_required
-def empresas(request):
-    try:
-        codes = [c.nombre for c in company_loader.get_all()]
-    except Exception:
-        codes = []
-    return render(request, 'panel/empresas.html', {
-        'titulo_pagina': 'Panel · Empresas',
-        'seccion': 'empresas',
-        'items': EmpresaLink.objects.all(),
-        'codes': codes,
+def nextcloud_view(request):
+    row = NextcloudConfig.get()
+    if row is not None:
+        form = NextcloudConfigForm(instance=row)
+    else:
+        # Sin fila aún: se muestran los valores de .env como referencia (menos el
+        # app-password, que no se expone en el HTML).
+        form = NextcloudConfigForm(initial={
+            'base_url': settings.NEXTCLOUD_BASE_URL,
+            'usuario': settings.NEXTCLOUD_USER,
+            'final_base': settings.NEXTCLOUD_FINAL_BASE,
+            'templates_path': settings.NEXTCLOUD_TEMPLATES_PATH,
+        })
+    return render(request, 'panel/nextcloud.html', {
+        'titulo_pagina': 'Panel · Nextcloud',
+        'seccion': 'nextcloud',
+        'form': form,
+        'carpetas': CarpetaRaiz.objects.all(),
+        # Resumen "qué se escaneará": carpetas con el toggle Escanear + el área ITO (fija).
+        'escaneadas': CarpetaRaiz.objects.filter(escanear=True),
+        'root_ito': seguimiento.ROOT_ITO.lstrip('/'),
+        'configurado': nextcloud.is_configured(),
+        'hay_fila': row is not None,
     })
 
 
 @superuser_required
-def empresa_form(request, pk=None):
-    obj = get_object_or_404(EmpresaLink, pk=pk) if pk else None
+def nextcloud_credenciales(request):
     if request.method == 'POST':
-        form = EmpresaLinkForm(request.POST, instance=obj)
+        row = NextcloudConfig.get() or NextcloudConfig()
+        form = NextcloudConfigForm(request.POST, instance=row)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Empresa guardada.')
-            return redirect('panel:empresas')
+            cache.delete(nextcloud.CONFIG_CACHE_KEY)
+            messages.success(request, 'Configuración de Nextcloud guardada.')
+        else:
+            messages.error(request, 'Revisa los campos de la configuración.')
+    return redirect('panel:nextcloud')
+
+
+@superuser_required
+def nextcloud_probar(request):
+    """Prueba la conexión WebDAV con la config efectiva (BD > .env). JSON."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST requerido'}, status=405)
+    try:
+        items = nextcloud.list_folder('/')
+        return JsonResponse({'ok': True, 'carpetas': sum(1 for i in items if i['es_dir'])})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+
+@superuser_required
+def nextcloud_sincronizar(request):
+    """Trae las carpetas raíz ``/20*`` de Nextcloud y crea las filas que falten en
+    ``CarpetaRaiz`` (nunca borra: las carpetas desaparecidas se eliminan a mano)."""
+    if request.method != 'POST':
+        return redirect('panel:nextcloud')
+    import re as _re
+    ito_name = seguimiento.ROOT_ITO.lstrip('/')
+    try:
+        items = [it['nombre'] for it in nextcloud.list_folder('/')
+                 if it['es_dir'] and it['nombre'].startswith('20')]
+    except Exception as e:
+        messages.error(request, f'No se pudo listar Nextcloud: {e}')
+        return redirect('panel:nextcloud')
+    # Dedup de montajes duplicados ('20 AJ (2)' == '20 AJ') y exclusión del área ITO.
+    nombres = {_re.sub(r'\s*\(\d+\)$', '', n) for n in items}
+    nombres.discard(ito_name)
+    nuevas = 0
+    for nombre in sorted(nombres):
+        _, creada = CarpetaRaiz.objects.get_or_create(
+            carpeta=nombre,
+            defaults={'codigo': _re.sub(r'^20[\s\-_]*', '', nombre), 'escanear': True})
+        nuevas += int(creada)
+    if nuevas:
+        _invalidar_carpetas()
+    messages.success(request, f'Sincronizado: {nuevas} carpeta(s) nueva(s) de {len(nombres)}.')
+    return redirect('panel:nextcloud')
+
+
+@superuser_required
+def nextcloud_carpetas_disponibles(request):
+    """GET → JSON: carpetas raíz de Nextcloud que aún NO están configuradas (para el
+    modal «Agregar carpeta»). Excluye el área ITO y deduplica montajes ' (N)'."""
+    import re as _re
+    try:
+        items = [it['nombre'] for it in nextcloud.list_folder('/') if it['es_dir']]
+    except Exception as e:
+        return JsonResponse({'error': str(e), 'carpetas': []})
+    nombres = {_re.sub(r'\s*\(\d+\)$', '', n) for n in items}
+    nombres.discard(seguimiento.ROOT_ITO.lstrip('/'))
+    existentes = set(CarpetaRaiz.objects.values_list('carpeta', flat=True))
+    return JsonResponse({'carpetas': sorted(nombres - existentes)})
+
+
+@superuser_required
+def carpeta_crear(request):
+    """POST: agrega una carpeta raíz a la configuración (quedará escaneada). Recibe
+    ``carpeta`` (nombre exacto en la raíz de Nextcloud, del modal o escrito a mano)."""
+    if request.method == 'POST':
+        import re as _re
+        nombre = (request.POST.get('carpeta') or '').strip().strip('/')
+        if not nombre or '/' in nombre:
+            messages.error(request, 'Nombre de carpeta inválido.')
+        else:
+            _, creada = CarpetaRaiz.objects.get_or_create(
+                carpeta=nombre,
+                defaults={'codigo': _re.sub(r'^20[\s\-_]*', '', nombre), 'escanear': True})
+            if creada:
+                _invalidar_carpetas()
+                messages.success(request, f'Carpeta «{nombre}» agregada: se escaneará.')
+            else:
+                messages.info(request, f'La carpeta «{nombre}» ya estaba configurada.')
+    return redirect('panel:nextcloud')
+
+
+_CARPETA_CAMPOS = {'escanear': 'escanear', 'contratista': 'es_contratista'}
+
+
+@superuser_required
+def carpeta_toggle(request, pk, campo):
+    c = get_object_or_404(CarpetaRaiz, pk=pk)
+    field = _CARPETA_CAMPOS.get(campo)
+    if request.method == 'POST' and field:
+        setattr(c, field, not getattr(c, field))
+        c.save(update_fields=[field])
+        _invalidar_carpetas()
+    return redirect('panel:nextcloud')
+
+
+@superuser_required
+def carpeta_form(request, pk):
+    obj = get_object_or_404(CarpetaRaiz, pk=pk)
+    if request.method == 'POST':
+        form = CarpetaRaizForm(request.POST, instance=obj)
+        if form.is_valid():
+            form.save()
+            _invalidar_carpetas()
+            messages.success(request, 'Carpeta guardada.')
+            return redirect('panel:nextcloud')
     else:
-        form = EmpresaLinkForm(instance=obj)
+        form = CarpetaRaizForm(instance=obj)
     return render(request, 'panel/form.html', {
-        'titulo_pagina': 'Panel · Empresas',
-        'seccion': 'empresas',
+        'titulo_pagina': 'Panel · Nextcloud',
+        'seccion': 'nextcloud',
         'form': form,
-        'titulo': 'Editar empresa' if obj else 'Nueva empresa',
-        'volver': 'panel:empresas',
+        'titulo': f'Editar carpeta «{obj.carpeta}»',
+        'volver': 'panel:nextcloud',
     })
 
 
 @superuser_required
-def empresa_eliminar(request, pk):
-    obj = get_object_or_404(EmpresaLink, pk=pk)
+def carpeta_eliminar(request, pk):
+    obj = get_object_or_404(CarpetaRaiz, pk=pk)
     if request.method == 'POST':
         obj.delete()
-        messages.success(request, 'Empresa eliminada.')
-    return redirect('panel:empresas')
+        _invalidar_carpetas()
+        messages.success(request, 'Carpeta eliminada de la configuración (Nextcloud no se toca).')
+    return redirect('panel:nextcloud')
 
 
 # ── Docs. Finales (SiteConfig) ───────────────────────────────────────────────────
@@ -406,7 +538,7 @@ def usuarios(request):
             'sin_password': not u.has_usable_password(),
             'acceso_contratista': getattr(profile, 'acceso_contratista', False),
             'acceso_finales': getattr(profile, 'acceso_finales', False),
-            'acceso_seguimiento': getattr(profile, 'acceso_seguimiento', False),
+            'acceso_proyectos': getattr(profile, 'acceso_proyectos', False),
             # Sitios asignados (vacío si ve todo). Coordinador/TK Redline y superusuario ven todo.
             've_todo': u.is_superuser or bool(profile and profile.rol in ROLES_TODO_SITIO),
             'sitios': sorted(f"{a.empresa} / {a.sitio}" for a in u.sitios_permitidos.all()),
@@ -418,6 +550,41 @@ def usuarios(request):
     })
 
 
+def _enviar_invitacion(request, u):
+    """Correo de bienvenida con el enlace de ingreso. En el primer ingreso (cuenta sin
+    contraseña usable) la propia pantalla de login pide crearla. Devuelve True si se envió."""
+    from django.core.mail import send_mail
+    url = request.build_absolute_uri(reverse('accounts:login'))
+    nombre = (u.first_name or u.email or u.username).strip()
+    cuerpo = (
+        f'Hola {nombre},\n\n'
+        'Se creó tu cuenta en Tk Redline.\n\n'
+        f'1. Ingresa a: {url}\n'
+        f'2. Escribe tu correo ({u.email or u.username}).\n'
+        '3. Crea tu contraseña y listo.\n\n'
+        'Si no esperabas este correo, ignóralo.\n')
+    try:
+        send_mail('Tu acceso a Tk Redline', cuerpo, None, [u.email or u.username],
+                  fail_silently=False)
+        return True
+    except Exception:
+        return False
+
+
+@superuser_required
+def usuario_invitar(request, pk):
+    """Reenvía el correo de ingreso a un usuario que aún no creó su contraseña."""
+    u = get_object_or_404(User, pk=pk)
+    if request.method == 'POST':
+        if u.is_superuser or not u.is_active or u.has_usable_password():
+            messages.error(request, 'Ese usuario ya tiene contraseña o no puede recibir la invitación.')
+        elif _enviar_invitacion(request, u):
+            messages.success(request, f'Correo enviado a {u.email or u.username}.')
+        else:
+            messages.error(request, 'No se pudo enviar el correo. Revisa la configuración de correo.')
+    return redirect('panel:usuarios')
+
+
 @superuser_required
 def usuario_crear(request):
     if request.method == 'POST':
@@ -426,14 +593,32 @@ def usuario_crear(request):
             cd = form.cleaned_data
             u = User.objects.create_user(username=cd['email'], email=cd['email'])
             u.first_name = cd['full_name']
-            u.set_unusable_password()  # el usuario crea su contraseña en el 1er ingreso
+            if cd['modo_acceso'] == 'password':
+                u.set_password(cd['password'])
+            else:
+                u.set_unusable_password()  # el usuario crea su contraseña en el 1er ingreso
             u.is_active = True
             u.save()
-            # Por defecto el usuario nuevo accede a Seguimiento (Contratista/Finales se
-            # habilitan luego con los toggles de la lista).
-            UserProfile.objects.update_or_create(
-                user=u, defaults={'rol': cd['rol'], 'acceso_seguimiento': True})
-            messages.success(request, 'Usuario creado. Creará su contraseña al ingresar.')
+            # Privilegios elegidos en el formulario (por defecto solo «Seguimiento»).
+            UserProfile.objects.update_or_create(user=u, defaults={
+                'rol': cd['rol'],
+                'acceso_contratista': cd['acceso_contratista'],
+                'acceso_finales': cd['acceso_finales'],
+                'acceso_proyectos': cd['acceso_proyectos'],
+            })
+            if cd['modo_acceso'] == 'password':
+                messages.success(request, 'Usuario creado con la contraseña indicada.')
+            elif _enviar_invitacion(request, u):
+                messages.success(request, f'Usuario creado. Se envió un correo a {cd["email"]} '
+                                          'para que ingrese y cree su contraseña.')
+            else:
+                messages.warning(request, 'Usuario creado, pero no se pudo enviar el correo. '
+                                          'Puede ingresar con su correo y crear su contraseña, '
+                                          'o reenviar la invitación desde la lista.')
+            if cd['rol'] not in ROLES_TODO_SITIO:
+                # Siguiente paso: asignarle los sitios que puede ver (restrictivo por defecto).
+                messages.info(request, 'Asigna ahora los sitios que podrá ver.')
+                return redirect('panel:usuario_sitios', pk=u.pk)
             return redirect('panel:usuarios')
     else:
         form = UserCreateForm()
@@ -455,6 +640,9 @@ def usuario_editar(request, pk):
         if form.is_valid():
             cd = form.cleaned_data
             profile.rol = cd['rol']
+            profile.acceso_contratista = cd['acceso_contratista']
+            profile.acceso_finales = cd['acceso_finales']
+            profile.acceso_proyectos = cd['acceso_proyectos']
             profile.save()
             u.first_name = cd['full_name']
             u.email = cd['email']
@@ -473,6 +661,9 @@ def usuario_editar(request, pk):
             'email': u.email or u.username,
             'rol': profile.rol,
             'is_active': u.is_active,
+            'acceso_contratista': profile.acceso_contratista,
+            'acceso_finales': profile.acceso_finales,
+            'acceso_proyectos': profile.acceso_proyectos,
         }, user_pk=u.pk)
     return render(request, 'panel/form.html', {
         'titulo_pagina': 'Panel · Usuarios',
@@ -503,13 +694,14 @@ def usuario_toggle_activo(request, pk):
 _ACCESO_CAMPOS = {
     'contratista': 'acceso_contratista',
     'finales': 'acceso_finales',
-    'seguimiento': 'acceso_seguimiento',
+    'proyectos': 'acceso_proyectos',
 }
 
 
 @superuser_required
 def usuario_toggle_acceso(request, pk, seccion):
-    """Invierte el acceso del usuario a una sección del navbar (contratista/finales/seguimiento)."""
+    """Invierte el acceso del usuario a una sección del navbar (contratista/finales/proyectos).
+    «Seguimiento old» no se asigna: es solo del superusuario."""
     u = get_object_or_404(User, pk=pk)
     campo = _ACCESO_CAMPOS.get(seccion)
     if request.method == 'POST' and campo:
@@ -520,6 +712,25 @@ def usuario_toggle_acceso(request, pk, seccion):
             setattr(profile, campo, not getattr(profile, campo))
             profile.save(update_fields=[campo])
     return redirect('panel:usuarios')
+
+
+@superuser_required
+def usuario_impersonar(request, pk):
+    """Inicia la impersonación: la app pasa a verse como el usuario objetivo (banner
+    con «Volver» en el header). Solo superusuario; nunca sobre otro superusuario."""
+    from accounts.middleware import IMPERSONATE_SESSION_KEY
+    from accounts.views import _landing
+    u = get_object_or_404(User, pk=pk)
+    if request.method != 'POST':
+        return redirect('panel:usuarios')
+    if u.is_superuser or u == request.user:
+        messages.error(request, 'No se puede impersonar a un superusuario.')
+        return redirect('panel:usuarios')
+    if not u.is_active:
+        messages.error(request, 'El usuario está deshabilitado.')
+        return redirect('panel:usuarios')
+    request.session[IMPERSONATE_SESSION_KEY] = u.pk
+    return redirect(_landing(u))
 
 
 @superuser_required

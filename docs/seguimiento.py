@@ -23,7 +23,7 @@ from django.utils import timezone as djtz
 from . import company_loader, nextcloud
 from .models import (
     ACCIONES_REVISION, ArchivoOculto, AsignacionArchivo, ConfirmacionDocumento,
-    DocumentoEsperado, DocumentoNoNecesario, EliminacionPendiente,
+    CopiaRenombrada, DocumentoEsperado, DocumentoNoNecesario, EliminacionPendiente,
     ObservacionDocumento, ROL_COLORES,
     SeguimientoCache, plantilla_de_sitio,
 )
@@ -265,34 +265,49 @@ def _archivos_de(base):
 
 
 def roots_constructora(forzar=False):
-    """Carpetas raíz que empiezan con '20' (posibles carpetas de constructora), excepto
-    el área ITO (``ROOT_ITO``). Se descubren dinámicamente desde Nextcloud y se cachean
-    (TTL 10 min). ``forzar`` re-descubre (p. ej. al crear una empresa nueva como
-    ``/20-PROSANGES``)."""
+    """Carpetas raíz que el seguimiento escanea como fuente de archivos, excepto el
+    área ITO (``ROOT_ITO``). Ya no se descubren dinámicamente: las define el
+    superusuario en el Panel → Nextcloud (modelo ``CarpetaRaiz``, toggle *escanear*;
+    el botón «Sincronizar» del Panel trae las carpetas ``/20*`` nuevas)."""
     if not forzar:
         roots = _cache.get("seg:roots20")
         if roots is not None:
             return roots
-    # Nombre canónico del área ITO (sin sufijo ' (N)'): NUNCA se escanea como
-    # constructora (se lee aparte). Excluye también duplicados '… (2)'.
     ito_name = ROOT_ITO.lstrip("/")
     try:
-        items = [(it["path"], it["nombre"]) for it in nextcloud.list_folder("/")
-                 if it["es_dir"] and it["nombre"].startswith("20")]
+        from .models import CarpetaRaiz
+        roots = sorted(f"/{c}" for c in CarpetaRaiz.objects
+                       .filter(escanear=True)
+                       .exclude(carpeta=ito_name)
+                       .values_list("carpeta", flat=True))
     except Exception:
         return []
-    # Dedup de montajes duplicados de Nextcloud ('20 AJ (2)' es el mismo contenido que
-    # '20 AJ'): se prefiere el nombre sin sufijo ' (N)' para no contar dos veces los archivos.
-    canon = {}
-    for path, name in items:
-        base = re.sub(r"\s*\(\d+\)$", "", name)
-        if base == ito_name:  # área ITO y sus duplicados → nunca como constructora
-            continue
-        if base not in canon or name == base:
-            canon[base] = path
-    roots = sorted(canon.values())
-    _cache.set("seg:roots20", roots, 600)
+    _cache.set("seg:roots20", roots, 60)
     return roots
+
+
+def roots_contratista():
+    """Paths raíz (``/20 AJ`` …) de las carpetas marcadas como **contratista** en el
+    Panel: sus archivos son de solo lectura (no renombrar/borrar). Cacheado 60 s."""
+    roots = _cache.get("seg:roots_contratista")
+    if roots is not None:
+        return roots
+    try:
+        from .models import CarpetaRaiz
+        roots = {f"/{c}" for c in CarpetaRaiz.objects
+                 .filter(es_contratista=True).values_list("carpeta", flat=True)}
+    except Exception:
+        return set()
+    _cache.set("seg:roots_contratista", roots, 60)
+    return roots
+
+
+def es_path_contratista(path):
+    """True si ``path`` vive bajo una carpeta raíz de contratista (normalizando los
+    montajes duplicados '20 AJ (2)' → '20 AJ')."""
+    primer = str(path).strip("/").split("/", 1)[0]
+    primer = re.sub(r"\s*\(\d+\)$", "", primer)
+    return f"/{primer}" in roots_contratista()
 
 
 def _ck_cons(root, code, sitio):
@@ -414,8 +429,14 @@ def _ensamblar_datos(empresa, sitio, archivos, ito_base):
         empresa=empresa, sitio=sitio).values_list("path", flat=True))
     ocultos = set(ArchivoOculto.objects.filter(
         empresa=empresa, sitio=sitio).values_list("path", flat=True))
+    copias = list(CopiaRenombrada.objects.filter(empresa=empresa, sitio=sitio))
+    copia_de = {c.path_copia: c.path_original for c in copias}
+    con_copia = {c.path_original for c in copias}
     for a in archivos:  # origen del archivo: del constructor o subido por TKR (área ITO)
         a["origen"] = "ito" if a["base"] == ito_base else "constructor"
+        # Solo lectura: vive bajo una carpeta raíz marcada como contratista en el Panel.
+        # (a["base"] es la carpeta del sitio, ej. "/20 AJ/<sitio>" → se mira el root.)
+        a["solo_lectura"] = es_path_contratista(a["base"])
 
     # Asignación, por prioridad:
     #  1. Asignación registrada en BD (la crea la subida del ITO y la asignación manual).
@@ -481,7 +502,10 @@ def _ensamblar_datos(empresa, sitio, archivos, ito_base):
             d, "presente" if presente else "falta", _format_lastmod(fecha_ts),
             [{"nombre": a["nombre"], "fecha": a["fecha"], "path": a["path"],
               "origen": a["origen"], "pendiente_eliminar": a["path"] in pendientes,
-              "oculto": a["path"] in ocultos, "asignado": a["path"] in asig_manual}
+              "oculto": a["path"] in ocultos, "asignado": a["path"] in asig_manual,
+              "solo_lectura": a.get("solo_lectura", False),
+              "copia_de": copia_de.get(a["path"], ""),
+              "tiene_copia": a["path"] in con_copia}
              for a in asig],
             _roles(d, conf_map.get(d.id, {}), obs_map.get(d.id, {})), necesario=necesario,
             obs=obs_map.get(d.id, {}),
@@ -508,7 +532,8 @@ def _ensamblar_datos(empresa, sitio, archivos, ito_base):
         rel = a["path"][len(base) + 1:] if a["path"].startswith(base + "/") else a["path"]
         inesperados.append({"carpeta": rel.rsplit("/", 1)[0] if "/" in rel else "",
                             "nombre": a["nombre"], "fecha": a["fecha"], "origen": a["origen"],
-                            "path": a["path"]})
+                            "path": a["path"],
+                            "solo_lectura": a.get("solo_lectura", False)})
     inesperados.sort(key=lambda x: (x["carpeta"].lower(), x["nombre"].lower()))
 
     datos = {
@@ -712,6 +737,37 @@ def renombrar_archivo(empresa, sitio, path, nuevo_nombre):
                 model.objects.filter(empresa=empresa, sitio=sitio, path=path).update(path=destino)
         except IntegrityError:  # ya había una fila para el destino → basta quitar la vieja
             model.objects.filter(empresa=empresa, sitio=sitio, path=path).delete()
+    # Los vínculos de copia renombrada también siguen al archivo (por ambos extremos).
+    try:
+        with transaction.atomic():
+            CopiaRenombrada.objects.filter(
+                empresa=empresa, sitio=sitio, path_copia=path).update(path_copia=destino)
+    except IntegrityError:
+        CopiaRenombrada.objects.filter(empresa=empresa, sitio=sitio, path_copia=path).delete()
+    CopiaRenombrada.objects.filter(
+        empresa=empresa, sitio=sitio, path_original=path).update(path_original=destino)
+    invalidar_cache(empresa, sitio)
+    return destino
+
+
+def copiar_renombrado(empresa, sitio, path, doc, nuevo_nombre, usuario=None):
+    """Copia un archivo de **contratista** (que es de solo lectura y no se toca) al área
+    ITO, en la carpeta de la etapa del documento, con el nombre que dicta la plantilla.
+    Registra la asignación de la copia al documento y el vínculo original↔copia
+    (``CopiaRenombrada``). No toca confirmaciones ni observaciones (el contenido no
+    cambió). Devuelve la ruta de la copia. Lanza :class:`nextcloud.DestinoExiste` si ya
+    existe un archivo con ese nombre en el destino."""
+    nombre = _sanitize_archivo(nuevo_nombre)
+    base = f"{ito_path(sitio)}/{doc.carpeta_contenedora()}"
+    nextcloud.ensure_tree(base)
+    destino = f"{base}/{nombre}"
+    nextcloud.copy(path, destino)
+    AsignacionArchivo.objects.update_or_create(
+        empresa=empresa, sitio=sitio, path=destino,
+        defaults={"documento": doc, "usuario": usuario})
+    CopiaRenombrada.objects.update_or_create(
+        empresa=empresa, sitio=sitio, path_copia=destino,
+        defaults={"path_original": path, "usuario": usuario})
     invalidar_cache(empresa, sitio)
     return destino
 

@@ -10,9 +10,18 @@
     <img src="{% static 'img/logo-tk-rl.png' %}" alt="Tk Redline" class="logo-light h-20 w-auto mb-6" />
     <img src="{% static 'img/logo-tk-rl-dark.png' %}" alt="Tk Redline" class="logo-dark h-20 w-auto mb-6" />
     <div class="flex flex-wrap gap-3 justify-center">
+      {% if user.is_superuser or user.profile.acceso_contratista %}
       <a href="{% url 'docs:index' %}" class="btn btn-info">Docs. Contratista</a>
+      {% endif %}
+      {% if user.is_superuser or user.profile.acceso_finales %}
       <a href="{% url 'docs:final' %}" class="btn btn-info">Docs. Finales</a>
-      <a href="{% url 'docs:seguimiento' %}" class="btn btn-info">Seguimiento ITO</a>
+      {% endif %}
+      {% if user.is_superuser %}
+      <a href="{% url 'docs:seguimiento' %}" class="btn btn-info">Seguimiento old</a>
+      {% endif %}
+      {% if user.is_superuser or user.profile.acceso_proyectos %}
+      <a href="{% url 'proyectos:index' %}" class="btn btn-info">Seguimiento</a>
+      {% endif %}
     </div>
 </div>
 {% endblock %}

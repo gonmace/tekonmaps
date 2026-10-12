@@ -1,0 +1,1339 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Seguimiento — Tk Redline{% endblock %}
+
+{% block header %}{% include 'header.html' %}{% endblock %}
+
+
+{% block content %}
+<div class="w-full max-w-[1800px] mx-auto px-4 sm:px-6 py-8">
+  {% csrf_token %}
+
+  <dialog id="modal-foto" class="modal">
+    <div class="modal-box max-w-none w-[96vw] bg-transparent shadow-none p-0 flex items-center justify-center">
+      <img id="foto-grande" src="" alt="" class="max-h-[88vh] max-w-full object-contain rounded-lg">
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+
+  <dialog id="modal-pend" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Editar pendiente</h3>
+      <div class="flex flex-col gap-3 mt-3">
+        <input id="ep-titulo" class="input input-bordered input-sm w-full" maxlength="200" placeholder="Título">
+        <div class="flex gap-2">
+          <input id="ep-fecha" type="date" class="input input-bordered input-sm flex-1">
+          <input id="ep-hora" type="time" class="input input-bordered input-sm w-32" title="Hora (opcional)">
+        </div>
+        <div class="flex gap-2">
+          <select id="ep-resp" class="select select-bordered select-sm flex-1 min-w-0"></select>
+          <input id="ep-resp-txt" class="input input-bordered input-sm flex-1 min-w-0 hidden" maxlength="100" placeholder="Nombre">
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input id="ep-alta" type="checkbox" class="checkbox checkbox-sm checkbox-error">
+          <span class="text-sm"><i class="fa-solid fa-flag text-error"></i> Prioridad alta</span>
+        </label>
+      </div>
+      <div class="modal-action gap-2">
+        <form method="dialog"><button class="btn btn-ghost btn-sm">Cancelar</button></form>
+        <button id="ep-ok" type="button" class="btn btn-info btn-sm">Guardar</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+
+  <div class="flex flex-wrap items-end gap-3 mb-6">
+    <div class="form-control w-full sm:w-auto">
+      <span class="label-text font-medium">Sitio</span>
+      <select id="proyecto-select" class="select select-bordered select-sm w-full sm:w-96">
+        <option value="">Selecciona un sitio…</option>
+      </select>
+    </div>
+    <div id="barra-proyecto" class="hidden">
+     <div class="flex flex-wrap items-end gap-3">
+      <div class="flex flex-nowrap items-center gap-2 w-full sm:w-auto">
+        <span class="label-text font-medium shrink-0">Estado</span>
+        <span id="estado-dot" class="inline-block w-3 h-3 rounded-full shrink-0" aria-hidden="true"></span>
+        <select id="proyecto-estado" class="select select-bordered select-sm flex-1 min-w-0 sm:flex-none sm:w-44" {% if not puede_estado %}disabled title="Solo el superusuario o un coordinador cambia el estado"{% endif %}>
+          {% for c, l in estados_proyecto %}<option value="{{ c }}">{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 pb-1">
+        <span class="label-text font-medium">ITO</span>
+        <span id="itos-chips" class="flex flex-wrap items-center gap-1"></span>
+        {% if es_superuser %}
+        <button id="btn-itos" type="button" class="btn btn-ghost btn-xs" title="Asignar ITOs al sitio">
+          <i class="fa-solid fa-user-plus"></i> Asignar
+        </button>
+        {% endif %}
+      </div>
+     </div>
+    </div>
+    {% if es_superuser %}
+    <a href="{% url 'proyectos:tablero' %}" class="btn btn-ghost btn-sm sm:ml-auto" title="Panorama de todos los sitios">
+      <i class="fa-solid fa-table-list"></i> Tablero
+    </a>
+    <div class="dropdown dropdown-end">
+      <div tabindex="0" role="button" class="btn btn-ghost btn-sm" title="Administrar"><i class="fa-solid fa-gear"></i></div>
+      <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[50] w-60 p-2 shadow border border-base-300">
+        <li><button id="btn-agregar" type="button"><i class="fa-solid fa-plus"></i> Agregar sitio</button></li>
+        <li id="item-quitar" class="hidden"><button id="btn-quitar" type="button"><i class="fa-solid fa-circle-minus"></i> Quitar de seguimiento</button></li>
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if es_superuser %}
+  <dialog id="modal-itos" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">ITOs del sitio</h3>
+      <p class="text-sm text-base-content/60">Cada ITO solo verá los sitios que tenga asignados.</p>
+      <div id="itos-lista" class="flex flex-col gap-1 mt-3 max-h-72 overflow-y-auto"></div>
+      <div class="modal-action gap-2">
+        <form method="dialog"><button class="btn btn-ghost btn-sm">Cancelar</button></form>
+        <button id="itos-ok" type="button" class="btn btn-info btn-sm">Guardar</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+
+  <dialog id="modal-agregar" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Agregar sitio a seguimiento</h3>
+      <div class="flex flex-col gap-3 mt-3">
+        <div class="form-control">
+          <span class="label-text font-medium">Empresa</span>
+          <select id="add-empresa" class="select select-bordered select-sm w-full">
+            {% for e in empresas %}<option value="{{ e.nombre }}">{{ e.nombre_display }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-control">
+          <span class="label-text font-medium">Sitio</span>
+          <select id="add-sitio" class="select select-bordered select-sm w-full">
+            <option value="">Cargando…</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-action gap-2">
+        <form method="dialog"><button class="btn btn-ghost btn-sm">Cancelar</button></form>
+        <button id="add-ok" type="button" class="btn btn-info btn-sm" disabled>Agregar</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
+  </dialog>
+  {% endif %}
+
+  <div id="seg-grid" class="grid grid-cols-1 lg:grid-cols-[20rem_minmax(0,1fr)] gap-6 items-start">
+  <aside class="lg:sticky lg:top-4">
+    <div id="aside-resizer" role="separator" aria-orientation="vertical" title="Arrastra para ampliar el mapa (doble clic: restablecer)"></div>
+    <div class="card bg-base-100 shadow-sm border border-base-300">
+      <div class="card-body p-3 gap-2">
+        <h2 class="font-semibold text-sm"><i class="fa-solid fa-map-location-dot"></i> Mapa de sitios</h2>
+        <div id="mapa-general" class="w-full h-[70vh] min-h-[420px] rounded-lg z-0"></div>
+        <div id="mapa-leyenda" class="flex flex-wrap gap-x-3 gap-y-1 text-xs"></div>
+        <p id="mapa-vacio" class="text-xs text-base-content/60 hidden">Aún no hay sitios ubicados en esta empresa. Selecciona un sitio y fija su ubicación.</p>
+      </div>
+    </div>
+  </aside>
+
+  <div class="min-w-0">
+  <div id="loading" class="hidden flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+  <div id="error" class="hidden"></div>
+  <div id="placeholder" class="text-center text-base-content/60 py-16">
+    <i class="fa-solid fa-diagram-project text-4xl mb-3"></i>
+    <p id="placeholder-msg">Selecciona una empresa y un sitio para ver su seguimiento.</p>
+  </div>
+
+  <div id="resultado" class="hidden">
+    <div id="proximos" class="mb-6 hidden"></div>
+    <div id="ubic-banner" class="alert alert-warning py-2 text-sm mb-4 hidden">
+      <i class="fa-solid fa-location-crosshairs"></i>
+      <span id="ubic-banner-txt" class="flex-1"></span>
+      <button id="ubic-banner-btn" type="button" class="btn btn-ghost btn-xs">Fijar ubicación</button>
+    </div>
+    <div id="etapa-switch" class="flex flex-wrap gap-2 mb-3 hidden"></div>
+    <div id="etapas" class="space-y-4"></div>
+    {% if es_superuser %}
+    <div id="hist-card" class="card bg-base-100 shadow-sm border border-base-300 mt-6">
+      <div class="card-body p-3 gap-2">
+        <button id="hist-toggle" type="button" class="flex items-center gap-2 w-full text-left font-semibold text-sm">
+          <i class="fa-solid fa-clock-rotate-left"></i> Historial
+          <span class="font-normal text-xs text-base-content/60">actividad y papelera</span>
+          <i id="hist-chevron" class="fa-solid fa-chevron-down ml-auto transition-transform"></i>
+        </button>
+        <div id="hist-cuerpo" class="hidden">
+          <div class="join mb-2">
+            <button type="button" class="btn btn-xs join-item btn-info" data-hist-tab="actividad">Actividad</button>
+            <button type="button" class="btn btn-xs join-item" data-hist-tab="papelera">Papelera</button>
+          </div>
+          <div id="hist-lista" class="text-sm"></div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    <div id="ubic-card" class="card bg-base-100 shadow-sm border border-base-300 mt-6">
+      <div class="card-body p-3 gap-2">
+        <button id="ubic-toggle" type="button" class="flex items-center gap-2 w-full text-left font-semibold text-sm">
+          <i class="fa-solid fa-location-dot"></i> Ubicación del sitio
+          <span id="ubic-resumen" class="font-normal text-xs text-base-content/60"></span>
+          <i id="ubic-chevron" class="fa-solid fa-chevron-down ml-auto transition-transform"></i>
+        </button>
+        <div id="ubic-cuerpo" class="hidden flex-col gap-2">
+          <div id="ubic-ctrl" class="flex flex-wrap items-center gap-1 {% if not es_admin %}hidden{% endif %}">
+            <input id="ubic-lat" class="input input-bordered input-sm w-32" placeholder="Latitud" inputmode="decimal">
+            <input id="ubic-lon" class="input input-bordered input-sm w-32" placeholder="Longitud" inputmode="decimal">
+            <button id="ubic-guardar" class="btn btn-info btn-sm"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+            <button id="ubic-quitar" class="btn btn-ghost btn-sm" title="Quitar ubicación"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div id="ubic-aviso" class="alert alert-warning py-2 text-sm hidden">
+            <i class="fa-solid fa-location-crosshairs"></i>
+            <span id="ubic-aviso-txt"></span>
+          </div>
+          <div id="mapa-sitio" class="w-full h-64 rounded-lg z-0"></div>
+          <p id="ubic-ayuda" class="text-xs text-base-content/60"></p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  </div>
+  </div>
+</div>
+
+<link rel="stylesheet" href="{% static 'proyectos/leaflet/leaflet.css' %}">
+<script src="{% static 'proyectos/leaflet/leaflet.js' %}"></script>
+
+<input type="file" id="file-input" accept="image/*" multiple class="hidden">
+
+<script>
+(function () {
+  const API_SITIOS = "{% url 'docs:api_sitios' %}";
+  const API = {
+    proyecto: "{% url 'proyectos:api_proyecto' %}",
+    proyectoEstado: "{% url 'proyectos:api_proyecto_estado' %}",
+    ubicacion: "{% url 'proyectos:api_proyecto_ubicacion' %}",
+    mapa: "{% url 'proyectos:api_mapa' %}",
+    habilitados: "{% url 'proyectos:api_habilitados' %}",
+    habilitar: "{% url 'proyectos:api_proyecto_habilitar' %}",
+    itos: "{% url 'proyectos:api_itos' %}",
+    itosGuardar: "{% url 'proyectos:api_itos_guardar' %}",
+    archivos: "{% url 'proyectos:api_archivos' %}",
+    archivo: "{% url 'proyectos:archivo_ver' %}",
+    imagenes: "{% url 'proyectos:api_imagenes' %}",
+    miniatura: "{% url 'proyectos:miniatura' %}",
+    pendCrear: "{% url 'proyectos:api_pendiente_crear' %}",
+    pendEditar: "{% url 'proyectos:api_pendiente_editar' %}",
+    actividad: "{% url 'proyectos:api_actividad' %}",
+    papelera: "{% url 'proyectos:api_papelera' %}",
+    restaurar: "{% url 'proyectos:api_restaurar' %}",
+    pendToggle: "{% url 'proyectos:api_pendiente_toggle' %}",
+    pendEliminar: "{% url 'proyectos:api_pendiente_eliminar' %}",
+    notaCrear: "{% url 'proyectos:api_nota_crear' %}",
+    notaEliminar: "{% url 'proyectos:api_nota_eliminar' %}",
+    imgSubir: "{% url 'proyectos:api_imagen_subir' %}",
+    imgEliminar: "{% url 'proyectos:api_imagen_eliminar' %}",
+  };
+  const ES_ADMIN = {{ es_admin|yesno:"true,false" }};
+  const ES_SUPERUSER = {{ es_superuser|yesno:"true,false" }};
+  const CSRF = '{{ csrf_token }}';
+  const K_SEL = 'proy_sel';
+
+  const $ = id => document.getElementById(id);
+  const proyectoSel = $('proyecto-select');
+  const SEL = { empresa: '', sitio: '' };   // proyecto abierto
+  let PROYECTOS = [];                      // sitios en seguimiento visibles
+  let DATOS = null, uploadEtapa = null;
+  let ETAPA_SEL = null;     // etapa elegida a mano (null = la que dicta el estado del proyecto)
+  const UI_ET = {};         // codigo etapa -> { hechos, notas } (estado de los <details>)
+  const uiEt = c => UI_ET[c] = UI_ET[c] || { hechos: false, notas: false };
+  const HIST = { abierto: false, tab: 'actividad' };   // tarjeta «Historial»
+
+  // Dictado por voz (Web Speech API): mantener Espacio en el cuadro de nota de la bitácora.
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const dictado = { rec: null, ta: null, base: '', final: '' };
+  function dictadoEstado(activo) {
+    const ta = dictado.ta;
+    if (!ta) return;
+    ta.classList.toggle('textarea-error', activo);
+    ta.placeholder = activo ? 'Escuchando…' : 'Agregar nota…';
+  }
+  function detenerDictado(abortar) {
+    const rec = dictado.rec;
+    if (!rec) return;
+    try { abortar ? rec.abort() : rec.stop(); } catch (e) {}
+    if (abortar) { dictadoEstado(false); dictado.rec = null; dictado.ta = null; }
+  }
+  function iniciarDictado(ta) {
+    if (!SR || dictado.rec) return;
+    const rec = new SR();
+    rec.lang = 'es-CL'; rec.continuous = true; rec.interimResults = true;
+    dictado.rec = rec; dictado.ta = ta; dictado.final = '';
+    dictado.base = ta.value.replace(/\s+$/, '');
+    rec.onresult = ev => {
+      let interino = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) dictado.final += t; else interino += t;
+      }
+      const texto = (dictado.final + interino).trim();
+      const sep = dictado.base && texto ? ' ' : '';
+      ta.value = (dictado.base + sep + texto).slice(0, ta.maxLength > 0 ? ta.maxLength : 2000);
+    };
+    rec.onerror = ev => {
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') toast('Permite el micrófono en el navegador para dictar.', 'warning');
+      else if (ev.error !== 'no-speech' && ev.error !== 'aborted') toast('Error de dictado: ' + ev.error, 'warning');
+    };
+    rec.onend = () => {
+      if (dictado.rec !== rec) return;
+      dictadoEstado(false); dictado.rec = null; dictado.ta = null;
+    };
+    try { rec.start(); dictadoEstado(true); } catch (e) { dictado.rec = null; dictado.ta = null; }
+  }
+
+  const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+  const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+
+  function show(which) {
+    ['loading', 'error', 'placeholder', 'resultado'].forEach(id => $(id).classList.add('hidden'));
+    $(which).classList.remove('hidden');
+  }
+  function toast(msg, tipo) {
+    const t = document.createElement('div');
+    t.className = 'toast toast-top toast-end z-[9999]';
+    t.innerHTML = `<div class="alert alert-${tipo || 'success'}"><span>${esc(msg)}</span></div>`;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+  async function post(url, body, isForm) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: isForm ? { 'X-CSRFToken': CSRF } : { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: isForm ? body : JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.error || (d.errores || []).join(' · ') || 'Error', 'error'); return null; }
+    if (d.errores && d.errores.length) toast(d.errores.join(' · '), 'warning');
+    return d;
+  }
+
+  const fmtFecha = iso => {
+    if (!iso) return '';
+    const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso);
+    return d.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  };
+  const fmtFechaHora = iso => new Date(iso).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' });
+  const hoyISO = () => { const d = new Date(); d.setHours(0, 0, 0, 0);
+    return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+
+  async function cargarProyectos(preferido) {
+    try {
+      const r = await fetch(API.habilitados);
+      PROYECTOS = (await r.json()).proyectos || [];
+    } catch (e) { PROYECTOS = []; }
+    proyectoSel.innerHTML = '<option value="">Selecciona un sitio…</option>' +
+      PROYECTOS.map((p, i) => `<option value="${i}">${esc(p.empresa_display)} · ${esc(p.sitio)}</option>`).join('');
+    $('placeholder-msg').textContent = PROYECTOS.length
+      ? 'Selecciona un sitio para ver su seguimiento.'
+      : 'Aún no hay sitios en seguimiento.' + (ES_SUPERUSER ? ' Usa «Agregar sitio» para empezar.' : '');
+    let pref = preferido;
+    if (!pref) {
+      const q = new URLSearchParams(location.search);
+      if (q.get('empresa') && q.get('sitio')) pref = { empresa: q.get('empresa'), sitio: q.get('sitio') };
+    }
+    if (!pref) { try { pref = JSON.parse(lsGet(K_SEL) || 'null'); } catch (e) {} }
+    const idx = pref ? PROYECTOS.findIndex(p => p.empresa === pref.empresa && p.sitio === pref.sitio) : -1;
+    if (idx >= 0) { proyectoSel.value = String(idx); seleccionar(PROYECTOS[idx]); }
+    else { seleccionar(null); }
+  }
+
+  function seleccionar(p) {
+    SEL.empresa = p ? p.empresa : '';
+    SEL.sitio = p ? p.sitio : '';
+    lsSet(K_SEL, JSON.stringify(p ? { empresa: p.empresa, sitio: p.sitio } : null));
+    cargar();
+  }
+
+  async function cargar() {
+    const sitio = SEL.sitio;
+    $('barra-proyecto').classList.add('hidden');
+    if ($('item-quitar')) $('item-quitar').classList.add('hidden');
+    if (!sitio) { show('placeholder'); cargarMapaGeneral(); return; }
+    show('loading');
+    try {
+      const r = await fetch(`${API.proyecto}?empresa=${encodeURIComponent(SEL.empresa)}&sitio=${encodeURIComponent(sitio)}`);
+      const d = await r.json();
+      if (!r.ok) { $('error').className = 'alert alert-error mb-6'; $('error').innerHTML = esc(d.error || 'Error'); show('error'); return; }
+      DATOS = d;
+      $('barra-proyecto').classList.remove('hidden');
+      if ($('item-quitar')) $('item-quitar').classList.remove('hidden');
+      render();
+      show('resultado');
+      cargarMapaGeneral();  // resalta/centra el pin del sitio abierto
+    } catch (e) {
+      $('error').className = 'alert alert-error mb-6'; $('error').textContent = 'No se pudo cargar el seguimiento.'; show('error');
+    }
+  }
+
+  function render() {
+    $('proyecto-estado').value = DATOS.estado;
+    pintarEstado();
+    resetDocs();
+    renderItos();
+    renderProximos();
+    renderMapaSitio();
+    detenerDictado(true);
+    renderEtapaSwitch();
+    $('etapas').innerHTML = etapasVisibles().map(renderEtapa).join('');
+    if (HIST.abierto) cargarHist();
+  }
+
+  // Solo la card de la etapa vigente: la fija el estado general del proyecto
+  // (ING/ASG → Ingeniería, EJE/TER → Construcción); Postergado/Cancelado
+  // conservan la etapa que estaba «En curso» (o Ingeniería).
+  // Punto con el color del estado elegido (el de la leyenda del mapa); el select queda neutro.
+  function pintarEstado() {
+    const c = COLOR_ESTADO[$('proyecto-estado').value] || '#6b7280';
+    $('estado-dot').style.background = c;
+    $('estado-dot').style.boxShadow = `0 0 0 3px color-mix(in srgb, ${c} 25%, transparent)`;
+  }
+
+  // Ingeniería → color del estado «Ingeniería»; Construcción → el de «Ejecución».
+  // Lo usan el selector de etapa y las tarjetas de la bitácora.
+  const colorEtapa = c => COLOR_ESTADO[{ ING: 'ING', CON: 'EJE' }[c] || 'ASG'] || '#6b7280';
+  // Texto legible sobre un fondo de color: oscuro si el fondo es claro (p. ej. el ámbar).
+  function textoSobre(hex) {
+    const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+    return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#1f2937' : '#fff';
+  }
+
+  function etapaAuto() {
+    const por = DATOS.etapas;
+    const cod = { ASG: 'ING', ING: 'ING', EJE: 'CON', TER: 'CON' }[DATOS.estado]
+      || (por.find(e => e.estado === 'CUR') || {}).etapa || 'ING';
+    return (por.find(x => x.etapa === cod) || por[0] || {}).etapa;
+  }
+
+  function etapasVisibles() {
+    const por = DATOS.etapas;
+    const cod = (ETAPA_SEL && por.some(e => e.etapa === ETAPA_SEL)) ? ETAPA_SEL : etapaAuto();
+    const e = por.find(x => x.etapa === cod) || por[0];
+    return e ? [e] : [];
+  }
+
+  // Selector «Ingeniería | Construcción»: abre la etapa que corresponde al estado, pero
+  // permite ver la otra (antes quedaba inaccesible al cambiar de estado).
+  function renderEtapaSwitch() {
+    const box = $('etapa-switch');
+    const por = DATOS.etapas;
+    box.classList.toggle('hidden', por.length < 2);
+    const actual = (etapasVisibles()[0] || {}).etapa;
+    box.innerHTML = por.map(e => {
+      const c = colorEtapa(e.etapa);
+      const estilo = e.etapa === actual
+        ? `background:${c};border-color:${c};color:${textoSobre(c)}`
+        : `background:color-mix(in srgb, ${c} 12%, transparent);border-color:${c};color:${c}`;
+      return `<button type="button" class="btn btn-sm font-semibold" style="${estilo}"
+        data-etapa-sel="${e.etapa}">${esc(e.nombre)}</button>`;
+    }).join('');
+  }
+  $('etapa-switch').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-etapa-sel]');
+    if (!b) return;
+    detenerDictado(true);
+    ETAPA_SEL = b.dataset.etapaSel;
+    renderEtapaSwitch();
+    $('etapas').innerHTML = etapasVisibles().map(renderEtapa).join('');
+  });
+
+  function renderItos() {
+    const itos = DATOS.itos || [];
+    $('itos-chips').innerHTML = itos.length
+      ? itos.map(i => `<span class="badge badge-outline">${esc(i.nombre)}</span>`).join('')
+      : '<span class="text-sm text-base-content/50">Sin asignar</span>';
+  }
+
+  function renderProximos() {
+    const hoy = hoyISO();
+    const lista = [];
+    DATOS.etapas.forEach(e => e.pendientes.filter(p => !p.hecho && p.fecha)
+      .forEach(p => lista.push({ ...p, etapa: e.nombre })));
+    lista.sort((a, b) => (a.fecha + (a.hora || '99:99')).localeCompare(b.fecha + (b.hora || '99:99')));
+    $('proximos').classList.toggle('hidden', !lista.length);
+    if (!lista.length) { $('proximos').innerHTML = ''; return; }
+    // Urgencia: vencido (rojo) · hoy (ámbar) · próximo (azul). Colores del tema vía color-mix.
+    const tono = f => f < hoy ? ['--color-error', '#dc2626', 'Vencido']
+      : f === hoy ? ['--color-warning', '#eab308', 'Hoy'] : ['--color-info', '#0284c7', ''];
+    const mix = (v, fb, pct) => `color-mix(in srgb, var(${v}, ${fb}) ${pct}%, transparent)`;
+    const vencidos = lista.filter(p => p.fecha < hoy).length;
+    const [cv, fv] = vencidos ? tono('0000-00-00') : tono('9999-99-99');
+    $('proximos').innerHTML = `<div class="card shadow-sm border border-base-300"
+        style="background:${mix(cv, fv, 8)};border-left:4px solid var(${cv}, ${fv})">
+      <div class="card-body p-4 gap-3">
+        <h3 class="font-bold text-base flex items-center gap-2">
+          <i class="fa-solid fa-calendar-days" style="color:var(${cv}, ${fv})"></i> Próximos pendientes
+          <span class="badge badge-sm font-semibold border-0" style="background:${mix(cv, fv, 25)};color:var(${cv}, ${fv})">${lista.length}</span>
+          ${vencidos ? `<span class="badge badge-sm badge-error">${vencidos} vencido${vencidos > 1 ? 's' : ''}</span>` : ''}
+        </h3>
+        <ul class="space-y-1.5">${lista.slice(0, 8).map(p => {
+          const [v, fb, rotulo] = tono(p.fecha);
+          return `<li class="flex flex-wrap gap-x-3 gap-y-1 items-center rounded-lg bg-base-100 px-3 py-2">
+            <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap"
+                  style="background:${mix(v, fb, 20)};color:var(${v}, ${fb})">
+              <i class="fa-regular fa-calendar"></i> ${rotulo ? rotulo + ' · ' : ''}${esc(fmtFecha(p.fecha))}${p.hora ? ' · ' + esc(p.hora) : ''}</span>
+            <span class="font-medium">${p.prioridad === 'A' ? '<i class="fa-solid fa-flag text-error" title="Prioridad alta"></i> ' : ''}${esc(p.titulo)}</span>
+            <span class="text-xs text-base-content/60 ml-auto">${esc(p.etapa)}${p.responsable ? ' · ' + esc(p.responsable) : ''}</span>
+          </li>`;
+        }).join('')}</ul></div></div>`;
+  }
+
+  // Responsable: elegir un usuario del sitio o escribir un nombre a mano («Otro nombre…»).
+  function respOpciones(sel, texto) {
+    const usuarios = (DATOS && DATOS.responsables) || [];
+    const conocido = sel && usuarios.some(r => String(r.id) === String(sel));
+    return '<option value="">Responsable…</option>' +
+      usuarios.map(r => `<option value="${r.id}" ${String(sel) === String(r.id) ? 'selected' : ''}>${esc(r.nombre)}</option>`).join('') +
+      `<option value="__otro" ${!conocido && texto ? 'selected' : ''}>✎ Otro nombre…</option>`;
+  }
+  function leerResponsable(selectEl, inputEl) {
+    if (selectEl.value === '__otro') return { responsable_id: '', responsable: inputEl.value.trim() };
+    return { responsable_id: selectEl.value, responsable: '' };
+  }
+
+  function renderEtapa(e) {
+    const hoy = hoyISO();
+    const liPend = p => {
+      const venc = !p.hecho && p.fecha && p.fecha < hoy;
+      const hoyP = !p.hecho && p.fecha === hoy;
+      const [v, fb] = venc ? ['--color-error', '#dc2626'] : ['--color-warning', '#eab308'];
+      const marca = venc || hoyP
+        ? `background:color-mix(in srgb, var(${v}, ${fb}) 10%, transparent);border-left:3px solid var(${v}, ${fb});` : '';
+      const chip = venc || hoyP
+        ? `inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold" style="background:color-mix(in srgb, var(${v}, ${fb}) 20%, transparent);color:var(${v}, ${fb})`
+        : '" style="';
+      return `
+      <li class="flex items-start gap-2 py-1 rounded-md ${p.hecho ? 'opacity-50' : ''} ${venc || hoyP ? 'px-2 my-1' : ''}" style="${marca}">
+        <input type="checkbox" class="checkbox checkbox-sm mt-0.5" data-act="toggle" data-id="${p.id}" ${p.hecho ? 'checked' : ''} ${ES_ADMIN ? '' : 'disabled'}>
+        <div class="flex-1 min-w-0">
+          <div class="${p.hecho ? 'line-through' : venc ? 'font-medium' : ''}">${esc(p.titulo)}</div>
+          <div class="text-xs text-base-content/60 flex flex-wrap gap-2 items-center">
+            ${p.fecha ? `<span class="${chip}"><i class="fa-regular fa-calendar"></i> ${venc ? 'Vencido · ' : hoyP ? 'Hoy · ' : ''}${esc(fmtFecha(p.fecha))}${p.hora ? ' · ' + esc(p.hora) : ''}</span>` : ''}
+            ${p.prioridad === 'A' ? '<span class="inline-flex items-center gap-1 font-semibold text-error"><i class="fa-solid fa-flag"></i> Alta</span>' : ''}
+            ${p.responsable ? `<span><i class="fa-regular fa-user"></i> ${esc(p.responsable)}</span>` : ''}
+          </div>
+        </div>
+        ${ES_ADMIN ? `<button class="btn btn-edit btn-xs btn-circle shrink-0" data-act="edit-pend" data-id="${p.id}" title="Editar pendiente"><i class="fa-solid fa-pen"></i></button>` : ''}
+        ${ES_ADMIN ? `<button class="btn btn-ghost btn-xs btn-circle text-error shrink-0" data-act="del-pend" data-id="${p.id}" title="Eliminar pendiente"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+      </li>`;
+    };
+    const abiertos = e.pendientes.filter(p => !p.hecho), hechos = e.pendientes.filter(p => p.hecho);
+    const ui = uiEt(e.etapa);
+    const pend = abiertos.map(liPend).join('')
+      || `<li class="text-sm text-base-content/50">${hechos.length ? 'Todo al día.' : 'Sin pendientes.'}</li>`;
+    // Realizados: al pie de la card, los 3 más recientes y el resto tras «Ver las N anteriores».
+    const HECHOS_VISIBLES = 3;
+    const hechosOrd = hechos.slice().sort((a, b) => ((b.fecha || '') + (b.hora || '')).localeCompare((a.fecha || '') + (a.hora || '')) || b.id - a.id);
+    const hechosAnt = hechosOrd.slice(HECHOS_VISIBLES);
+    const hechosHtml = hechos.length
+      ? `<div class="border-t border-base-300 pt-3">
+          <h3 class="font-semibold text-sm mb-1 text-base-content/70"><i class="fa-regular fa-circle-check"></i> Realizados</h3>
+          <ul>${hechosOrd.slice(0, HECHOS_VISIBLES).map(liPend).join('')}</ul>
+          ${hechosAnt.length ? `<details data-det="hechos" class="mt-1" ${ui.hechos ? 'open' : ''}>
+            <summary class="cursor-pointer text-sm text-base-content/60 select-none">Ver las ${hechosAnt.length} anteriores</summary>
+            <ul>${hechosAnt.map(liPend).join('')}</ul></details>` : ''}
+        </div>` : '';
+    const imagenes = e.imagenes.map(i => `
+      <div class="relative group">
+        <img src="${i.url}" alt="${esc(i.descripcion)}" loading="lazy" data-act="foto" data-url="${i.url}"
+             class="w-full h-24 object-cover rounded-lg cursor-pointer">
+        ${i.puede_borrar ? `<button class="btn btn-circle btn-xs btn-error absolute top-1 right-1 opacity-80" data-act="del-img" data-id="${i.id}" title="Eliminar"><i class="fa-solid fa-xmark"></i></button>` : ''}
+        ${i.descripcion ? `<div class="text-xs truncate mt-0.5" title="${esc(i.descripcion)}">${esc(i.descripcion)}</div>` : ''}
+      </div>`).join('');
+    const colorNota = colorEtapa(e.etapa);
+    const liNota = n => `
+      <li class="text-sm rounded-lg px-3 py-2 flex items-start gap-2"
+          style="background:color-mix(in srgb, ${colorNota} 14%, transparent);border-left:4px solid ${colorNota}">
+        <div class="flex-1 min-w-0">
+          <div class="whitespace-pre-wrap break-words">${esc(n.texto)}</div>
+          <div class="text-xs text-base-content/50">${esc(n.usuario)} · ${esc(fmtFechaHora(n.fecha))}</div>
+        </div>
+        ${n.puede_borrar ? `<button class="btn btn-ghost btn-xs btn-circle text-error shrink-0" data-act="del-nota" data-id="${n.id}" title="Eliminar nota"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+      </li>`;
+    const NOTAS_VISIBLES = 3;
+    const recientes = e.notas.slice(0, NOTAS_VISIBLES), anteriores = e.notas.slice(NOTAS_VISIBLES);
+    const notas = recientes.map(liNota).join('') || '<li class="text-sm text-base-content/50">Sin notas.</li>';
+    const notasAnt = anteriores.length
+      ? `<details data-det="notas" class="mt-2" ${ui.notas ? 'open' : ''}>
+          <summary class="cursor-pointer text-sm text-base-content/60 select-none">Ver las ${anteriores.length} anteriores</summary>
+          <ul class="space-y-2 mt-2">${anteriores.map(liNota).join('')}</ul></details>` : '';
+    // Dos cards lado a lado (izq.: pendientes + bitácora · der.: imágenes + documentos)
+    // bajo un mismo contenedor [data-etapa] que usa la delegación de eventos.
+    return `<div class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start [&>section]:min-w-0" data-etapa="${e.id}" data-codigo="${e.etapa}">
+      <div class="space-y-4 min-w-0">
+      <section class="card bg-base-100 shadow-sm border border-base-300">
+      <div class="card-body p-4 gap-4">
+        <div>
+          <h3 class="font-semibold text-sm mb-1"><i class="fa-solid fa-list-check"></i> Pendientes</h3>
+          <ul>${pend}</ul>
+          ${ES_ADMIN ? `<div class="flex flex-col gap-1 mt-2">
+            <input class="input input-bordered input-sm w-full" placeholder="Nuevo pendiente…" data-f="titulo" maxlength="200">
+            <div class="flex flex-nowrap items-center gap-1">
+              <input type="date" class="input input-bordered input-sm w-36 shrink-0" data-f="fecha">
+              <input type="time" class="input input-bordered input-sm w-28 shrink-0" data-f="hora" title="Hora (opcional)">
+              <button type="button" class="btn btn-ghost btn-sm shrink-0" data-act="prio" data-prio="N" title="Prioridad alta"><i class="fa-regular fa-flag"></i></button>
+            </div>
+            <div class="flex flex-nowrap items-center gap-1">
+              <select class="select select-bordered select-sm flex-1 min-w-0" data-f="resp_id">${respOpciones('')}</select>
+              <input class="input input-bordered input-sm flex-1 min-w-0 hidden" placeholder="Nombre del responsable" data-f="resp" maxlength="100">
+              <button class="btn btn-info btn-sm shrink-0" data-act="add-pend"><i class="fa-solid fa-plus"></i></button>
+            </div>
+          </div>` : ''}
+        </div>
+        ${hechosHtml}
+      </div></section>
+      <section class="card bg-base-100 shadow-sm border border-base-300">
+      <div class="card-body p-4 gap-4">
+        <div>
+          <h3 class="font-semibold text-sm mb-1"><i class="fa-regular fa-note-sticky"></i> Bitácora</h3>
+          ${ES_ADMIN ? `<div class="flex gap-1 mb-2">
+            <textarea class="textarea textarea-bordered textarea-sm flex-1" rows="2" placeholder="Agregar nota…" data-f="nota" maxlength="2000"></textarea>
+            <button class="btn btn-info btn-sm self-start" data-act="add-nota"><i class="fa-solid fa-paper-plane"></i></button>
+          </div>
+          ${SR ? '<div class="text-xs text-base-content/50 -mt-1 mb-2">Mantén Espacio para dictar</div>' : ''}` : ''}
+          <ul class="space-y-2">${notas}</ul>
+          ${notasAnt}
+        </div>
+      </div></section>
+      </div>
+      <section class="card bg-base-100 shadow-sm border border-base-300">
+      <div class="card-body p-4 gap-4">
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <h3 class="font-semibold text-sm"><i class="fa-regular fa-images"></i> Imágenes</h3>
+            <div class="flex gap-1">
+              <button class="btn btn-ghost btn-xs" data-act="img-carpeta" title="Muestra en miniatura las fotos de las carpetas FOTOGRAFIAS / IMAGENES / FOTOS de esta etapa"><i class="fa-solid fa-cloud-arrow-down"></i> Fotos de la carpeta</button>
+              ${ES_ADMIN ? `<button class="btn btn-info btn-xs" data-act="subir"><i class="fa-solid fa-upload"></i> Subir</button>` : ''}
+            </div>
+          </div>
+          ${e.imagenes.length ? `<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">${imagenes}</div>` : ''}
+          <div data-img-root>${imgCarpetaHtml(e.etapa, !e.imagenes.length)}</div>
+        </div>
+        <div data-docs-root>${docsHtml(e.etapa)}</div>
+      </div></section>
+    </div>`;
+  }
+
+  // ── Mapas (Leaflet local; tiles OSM) ─────────────────────────────────────
+  const COLOR_ESTADO = { ASG: '#6b7280', ING: '#fcd34d', EJE: '#2563eb',
+                         TER: '#16a34a', PTG: '#8b5cf6', CAN: '#dc2626' };
+  const NOM_ESTADO = { {% for c, l in estados_proyecto %}{{ c }}: "{{ l }}",{% endfor %} };
+  const CENTRO_CHILE = [-33.45, -70.65];
+  let mapaG = null, capaG = null, sitiosG = [], mapaS = null, markS = null, ubicTmp = null;
+  let ubicAbierta = true, ubicDeSitio = '';
+
+  function setUbicAbierta(abierta) {
+    ubicAbierta = abierta;
+    $('ubic-cuerpo').classList.toggle('hidden', !abierta);
+    $('ubic-cuerpo').classList.toggle('flex', abierta);
+    $('ubic-chevron').style.transform = abierta ? 'rotate(180deg)' : '';
+    if (abierta && mapaS) {
+      setTimeout(() => {
+        mapaS.invalidateSize();
+        if (DATOS && DATOS.lat != null) mapaS.setView([DATOS.lat, DATOS.lon], 15);
+      }, 50);
+    }
+  }
+  $('ubic-toggle').addEventListener('click', () => setUbicAbierta(!ubicAbierta));
+  $('ubic-banner-btn').addEventListener('click', () => {
+    setUbicAbierta(true);
+    $('ubic-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  // Marcador tipo globo (gota); el sitio seleccionado emite una onda en la punta.
+  document.head.insertAdjacentHTML('beforeend', `<style>
+    .mapa-btn { background: #fff; color: #1f2937; border: 1px solid rgba(0,0,0,.2); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+    .mapa-btn:hover:not(:disabled) { background: #f3f4f6; color: #000; }
+    .mapa-btn:disabled { background: #fff; color: #9ca3af; opacity: .85; cursor: not-allowed; }
+    @keyframes pin-onda { 0% { transform: scale(.6); opacity: .7; } 100% { transform: scale(3); opacity: 0; } }
+    .pin-globo { position: relative; width: 100%; height: 100%; }
+    .pin-globo svg { display: block; width: 100%; height: 100%; overflow: visible;
+      filter: drop-shadow(0 2px 2px rgba(0,0,0,.45)); transform-origin: 50% 100%; }
+    .pin-sel::before { content: ''; position: absolute; left: 50%; bottom: -8px; width: 16px; height: 16px;
+      margin-left: -8px; border-radius: 50%; background: var(--pin-c); animation: pin-onda 1.6s ease-out infinite; }
+    @media (prefers-reduced-motion: reduce) { .pin-sel::before { animation: none; } }
+    .leaflet-tooltip.mapa-tip { white-space: normal; width: max-content; max-width: 14rem;
+      overflow-wrap: anywhere; text-align: center; line-height: 1.3; }
+  </style>`);
+  const pin = (color, grande) => {
+    const w = 26, h = 36;
+    return L.divIcon({
+      className: '', iconSize: [w, h], iconAnchor: [w / 2, h], tooltipAnchor: [0, -h + 4],
+      html: `<div class="pin-globo${grande ? ' pin-sel' : ''}" style="--pin-c:${color}">`
+          + `<svg viewBox="0 0 24 32" aria-hidden="true"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 20 12 20s12-11 12-20C24 5.4 18.6 0 12 0z" `
+          + `fill="${color}" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="12" r="4.5" fill="#fff"/></svg></div>`,
+    });
+  };
+  // ── Redimensionar la columna del mapa arrastrando su borde derecho (solo ≥ lg) ──
+  document.head.insertAdjacentHTML('beforeend', `<style>
+    #aside-resizer { display: none; }
+    @media (min-width: 1024px) {
+      #seg-grid { grid-template-columns: var(--aside-w, 20rem) minmax(0, 1fr); }
+      #aside-resizer { display: block; position: absolute; top: 0; bottom: 0; right: -16px; width: 8px; z-index: 5;
+        cursor: col-resize; border-radius: 4px; touch-action: none; }
+      #aside-resizer:hover, #aside-resizer.arrastrando { background: oklch(var(--p, 0.6 0.2 250) / .45); }
+    }
+  </style>`);
+  (function () {
+    const grid = $('seg-grid'), h = $('aside-resizer'), KEY = 'seg-aside-w';
+    const MIN = 256;
+    const limitar = w => Math.max(MIN, Math.min(w, grid.clientWidth * 0.7));
+    const aplicar = w => {
+      if (w == null) grid.style.removeProperty('--aside-w'); else grid.style.setProperty('--aside-w', limitar(w) + 'px');
+      if (mapaG) mapaG.invalidateSize();
+    };
+    try { const g = parseFloat(localStorage.getItem(KEY)); if (g) aplicar(g); } catch (e) {}
+    let x0 = 0, w0 = 0;
+    h.addEventListener('pointerdown', ev => {
+      x0 = ev.clientX; w0 = h.parentElement.getBoundingClientRect().width;
+      h.setPointerCapture(ev.pointerId); h.classList.add('arrastrando'); ev.preventDefault();
+    });
+    h.addEventListener('pointermove', ev => {
+      if (!h.hasPointerCapture(ev.pointerId)) return;
+      aplicar(w0 + ev.clientX - x0);
+    });
+    const fin = ev => {
+      if (!h.hasPointerCapture(ev.pointerId)) return;
+      h.releasePointerCapture(ev.pointerId); h.classList.remove('arrastrando');
+      try { localStorage.setItem(KEY, String(h.parentElement.getBoundingClientRect().width)); } catch (e) {}
+    };
+    h.addEventListener('pointerup', fin); h.addEventListener('pointercancel', fin);
+    h.addEventListener('dblclick', () => { aplicar(null); try { localStorage.removeItem(KEY); } catch (e) {} });
+    window.addEventListener('resize', () => { if (mapaG) mapaG.invalidateSize(); });
+  })();
+
+  const tiles = () => L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    // OSM exige Referer: Django envía Referrer-Policy 'same-origin' por defecto, y sin
+    // Referer los tiles responden 403 «Access blocked». Se fuerza solo en estas imágenes.
+    { maxZoom: 19, attribution: '&copy; OpenStreetMap',
+      referrerPolicy: 'strict-origin-when-cross-origin' });
+
+  $('mapa-leyenda').innerHTML = Object.keys(COLOR_ESTADO).filter(c => NOM_ESTADO[c]).map(c =>
+    `<span class="inline-flex items-center gap-1"><span style="width:10px;height:10px;border-radius:50%;background:${COLOR_ESTADO[c]};display:inline-block"></span>${esc(NOM_ESTADO[c])}</span>`).join('');
+
+  async function cargarMapaGeneral() {
+    if (!mapaG) {
+      mapaG = L.map('mapa-general').setView(CENTRO_CHILE, 5);
+      tiles().addTo(mapaG);
+      capaG = L.layerGroup().addTo(mapaG);
+      // Botones (arriba a la derecha): ver todos los sitios / volar al sitio vigente.
+      const Ir = L.Control.extend({
+        options: { position: 'topright' },
+        onAdd() {
+          const c = L.DomUtil.create('div', 'flex gap-2');
+          const boton = (id, icono, titulo) => {
+            const b = L.DomUtil.create('button', 'btn btn-sm btn-circle mapa-btn', c);
+            b.type = 'button'; b.id = id; b.title = titulo; b.setAttribute('aria-label', titulo);
+            b.innerHTML = `<i class="fa-solid ${icono}"></i>`;
+            return b;
+          };
+          const todos = boton('mapa-ver-todos', 'fa-expand', 'Ver todos los sitios');
+          const ir = boton('mapa-ir-sitio', 'fa-location-crosshairs', 'Ir al sitio vigente');
+          L.DomEvent.disableClickPropagation(c);
+          L.DomEvent.on(todos, 'click', () => {
+            if (sitiosG.length) mapaG.flyToBounds(L.latLngBounds(sitiosG.map(x => [x.lat, x.lon])).pad(0.3),
+                                                  { maxZoom: 14, duration: 1.5 });
+          });
+          L.DomEvent.on(ir, 'click', () => {
+            const v = sitiosG.find(x => x.empresa === SEL.empresa && x.sitio === SEL.sitio);
+            if (v) mapaG.flyTo([v.lat, v.lon], 15, { duration: 1.5 });
+          });
+          return c;
+        },
+      });
+      new Ir().addTo(mapaG);
+    }
+    capaG.clearLayers();
+    let sitios = [];
+    try {
+      const r = await fetch(API.mapa);
+      sitios = (await r.json()).sitios || [];
+    } catch (e) {}
+    sitiosG = sitios;
+    $('mapa-vacio').classList.toggle('hidden', sitios.length > 0);
+    sitios.forEach(s => {
+      L.marker([s.lat, s.lon], { icon: pin(COLOR_ESTADO[s.estado] || '#6b7280', s.empresa === SEL.empresa && s.sitio === SEL.sitio) })
+        .addTo(capaG)
+        .bindTooltip(`${s.sitio} · ${s.estado_display}`, { className: 'mapa-tip' })
+        .on('click', () => {
+          const i = PROYECTOS.findIndex(p => p.empresa === s.empresa && p.sitio === s.sitio);
+          if (i >= 0) { proyectoSel.value = String(i); seleccionar(PROYECTOS[i]); }
+        });
+    });
+    const sel = sitios.find(s => s.empresa === SEL.empresa && s.sitio === SEL.sitio);
+    $('mapa-ir-sitio').disabled = !sel;
+    $('mapa-ver-todos').disabled = !sitios.length;
+    if (sel) mapaG.setView([sel.lat, sel.lon], 13);
+    else if (sitios.length) mapaG.fitBounds(L.latLngBounds(sitios.map(s => [s.lat, s.lon])).pad(0.3), { maxZoom: 14 });
+    setTimeout(() => mapaG.invalidateSize(), 50);
+  }
+
+  function renderMapaSitio() {
+    if (!mapaS) {
+      mapaS = L.map('mapa-sitio').setView(CENTRO_CHILE, 5);
+      // Satélite por defecto (Esri World Imagery) con selector de capas; OSM como alternativa.
+      const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        { maxZoom: 19, attribution: 'Tiles &copy; Esri' });
+      const calles = tiles();
+      satelite.addTo(mapaS);
+      L.control.layers({ 'Satélite': satelite, 'Mapa': calles }, null, { position: 'topright' }).addTo(mapaS);
+      if (ES_ADMIN) mapaS.on('click', ev => fijarTmp(ev.latlng.lat, ev.latlng.lng));
+    }
+    ubicTmp = null;
+    const clave = SEL.empresa + '|' + SEL.sitio;
+    if (ubicDeSitio !== clave) { ubicDeSitio = clave; ubicAbierta = DATOS.lat == null; }
+    if (DATOS.lat == null) ubicAbierta = true;
+    $('ubic-resumen').textContent = DATOS.lat != null
+      ? `· ${DATOS.lat.toFixed(5)}, ${DATOS.lon.toFixed(5)}` : '· sin ubicación';
+    setUbicAbierta(ubicAbierta);
+    ponerMarker(DATOS.lat, DATOS.lon, COLOR_ESTADO[DATOS.estado]);
+    if (DATOS.lat == null && ES_ADMIN) setTimeout(() => $('ubic-lat').focus({ preventScroll: true }), 80);
+    $('ubic-lat').value = DATOS.lat ?? '';
+    $('ubic-lon').value = DATOS.lon ?? '';
+    const sinUbic = DATOS.lat == null;
+    $('ubic-aviso').classList.toggle('hidden', !sinUbic);
+    $('ubic-aviso-txt').textContent = ES_ADMIN
+      ? 'Este sitio no tiene ubicación. Haz clic en el mapa o escribe latitud y longitud y pulsa Guardar.'
+      : 'Este sitio aún no tiene ubicación.';
+    $('ubic-ayuda').textContent = '';
+    // Aviso delgado arriba (la card de ubicación va al final de la página).
+    $('ubic-banner').classList.toggle('hidden', !sinUbic);
+    $('ubic-banner-txt').textContent = ES_ADMIN ? 'Este sitio aún no tiene ubicación.' : 'Este sitio aún no tiene ubicación.';
+    $('ubic-banner-btn').classList.toggle('hidden', !ES_ADMIN);
+    if (DATOS.lat != null) mapaS.setView([DATOS.lat, DATOS.lon], 15); else mapaS.setView(CENTRO_CHILE, 5);
+    setTimeout(() => mapaS.invalidateSize(), 50);
+  }
+
+  function ponerMarker(lat, lon, color) {
+    if (markS) { mapaS.removeLayer(markS); markS = null; }
+    if (lat != null && lon != null) markS = L.marker([lat, lon], { icon: pin(color || '#6b7280', true) }).addTo(mapaS);
+  }
+
+  function fijarTmp(lat, lon) {
+    ubicTmp = [lat, lon];
+    $('ubic-aviso').classList.add('hidden');
+    $('ubic-lat').value = lat.toFixed(6);
+    $('ubic-lon').value = lon.toFixed(6);
+    ponerMarker(lat, lon, '#f59e0b');
+    $('ubic-ayuda').textContent = 'Ubicación sin guardar: pulsa Guardar para confirmarla.';
+  }
+
+  async function guardarUbicacion(lat, lon) {
+    const r = await post(API.ubicacion, { empresa: SEL.empresa, sitio: SEL.sitio, lat, lon });
+    if (r) {
+      toast(lat === null ? 'Ubicación eliminada' : 'Ubicación guardada');
+      if (lat !== null) ubicAbierta = false;  // guardada: se contrae la ventana del mapa
+      await cargar();
+    }
+  }
+  $('ubic-guardar').addEventListener('click', () => {
+    const lat = parseFloat($('ubic-lat').value.replace(',', '.')), lon = parseFloat($('ubic-lon').value.replace(',', '.'));
+    if (isNaN(lat) || isNaN(lon)) return toast('Coordenadas inválidas.', 'warning');
+    guardarUbicacion(lat, lon);
+  });
+  $('ubic-quitar').addEventListener('click', () => {
+    if (confirm('¿Quitar la ubicación del sitio?')) guardarUbicacion(null, null);
+  });
+  ['ubic-lat', 'ubic-lon'].forEach(id => $(id).addEventListener('change', () => {
+    const lat = parseFloat($('ubic-lat').value.replace(',', '.')), lon = parseFloat($('ubic-lon').value.replace(',', '.'));
+    if (!isNaN(lat) && !isNaN(lon)) { fijarTmp(lat, lon); mapaS.setView([lat, lon], 15); }
+  }));
+
+  // Resultado de la sincronización con el calendario de Nextcloud.
+  function avisoCalendario(r) {
+    if (!r || !r.calendario) return;
+    if (r.calendario === 'error') toast('Guardado, pero no se pudo actualizar el calendario de Nextcloud.', 'warning');
+    else if (r.calendario === 'ok') toast('Calendario de Nextcloud actualizado');
+  }
+
+  $('etapas').addEventListener('toggle', ev => {
+    const d = ev.target, cod = d.closest && d.closest('[data-codigo]');
+    if (d.dataset && d.dataset.det && cod) uiEt(cod.dataset.codigo)[d.dataset.det] = d.open;
+  }, true);
+
+  // Delegación de eventos sobre el contenedor de etapas.
+  $('etapas').addEventListener('click', async ev => {
+    const el = ev.target.closest('[data-act]');
+    if (!el) return;
+    const card = el.closest('[data-etapa]');
+    const etapaId = card && Number(card.dataset.etapa);
+    const act = el.dataset.act;
+    let r = null;
+    if (act === 'foto') { $('foto-grande').src = el.dataset.url; $('modal-foto').showModal(); return; }
+    if (act === 'subir') { uploadEtapa = etapaId; $('file-input').click(); return; }
+    if (act === 'prio') {
+      const alta = el.dataset.prio !== 'A';
+      el.dataset.prio = alta ? 'A' : 'N';
+      el.classList.toggle('text-error', alta);
+      el.querySelector('i').className = alta ? 'fa-solid fa-flag' : 'fa-regular fa-flag';
+      return;
+    }
+    if (act === 'edit-pend') { abrirEditarPendiente(Number(el.dataset.id)); return; }
+    if (act === 'img-carpeta') { cargarImgCarpeta(card.dataset.codigo, !!IMG_ET[card.dataset.codigo]); return; }
+    if (act.startsWith('docs-')) { docsAccion(act, card.dataset.codigo, el); return; }
+    if (act === 'add-pend') {
+      const titulo = card.querySelector('[data-f=titulo]').value.trim();
+      if (!titulo) return toast('Escribe un título.', 'warning');
+      r = await post(API.pendCrear, { etapa_id: etapaId, titulo,
+        fecha: card.querySelector('[data-f=fecha]').value, hora: card.querySelector('[data-f=hora]').value,
+        prioridad: card.querySelector('[data-act=prio]').dataset.prio,
+        ...leerResponsable(card.querySelector('[data-f=resp_id]'), card.querySelector('[data-f=resp]')) });
+      avisoCalendario(r);
+    } else if (act === 'add-nota') {
+      const texto = card.querySelector('[data-f=nota]').value.trim();
+      if (!texto) return;
+      r = await post(API.notaCrear, { etapa_id: etapaId, texto });
+    } else if (act === 'del-pend') {
+      if (!confirm('¿Eliminar el pendiente?')) return;
+      r = await post(API.pendEliminar, { id: Number(el.dataset.id) });
+      avisoCalendario(r);
+    } else if (act === 'del-nota') {
+      if (!confirm('¿Eliminar la nota?')) return;
+      r = await post(API.notaEliminar, { id: Number(el.dataset.id) });
+    } else if (act === 'del-img') {
+      if (!confirm('¿Eliminar la imagen (también en Nextcloud)?')) return;
+      r = await post(API.imgEliminar, { id: Number(el.dataset.id) });
+    } else return;
+    if (r) cargar();
+  });
+
+  // Mantener Espacio en el cuadro de nota = dictar; un toque corto escribe el espacio normal.
+  if (SR) {
+    const esNota = ev => ev.target.matches && ev.target.matches('textarea[data-f=nota]');
+    $('etapas').addEventListener('keydown', ev => {
+      if (ev.code !== 'Space' || !esNota(ev) || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      if (!ev.repeat) return;               // primer toque: espacio normal
+      ev.preventDefault();
+      if (!dictado.rec) {
+        const ta = ev.target;
+        ta.value = ta.value.replace(/ +$/, '');  // quita el espacio del primer toque
+        iniciarDictado(ta);
+      }
+    });
+    $('etapas').addEventListener('keyup', ev => {
+      if (ev.code !== 'Space' || !esNota(ev) || !dictado.rec) return;
+      ev.preventDefault();
+      detenerDictado();
+    });
+    $('etapas').addEventListener('focusout', ev => { if (esNota(ev) && dictado.rec && dictado.ta === ev.target) detenerDictado(); });
+  }
+
+  $('etapas').addEventListener('change', async ev => {
+    if (ev.target.matches('[data-f=resp_id]')) {
+      const inp = ev.target.parentElement.querySelector('[data-f=resp]');
+      inp.classList.toggle('hidden', ev.target.value !== '__otro');
+      if (ev.target.value === '__otro') inp.focus();
+      return;
+    }
+    const el = ev.target.closest('[data-act]');
+    if (!el) return;
+    let r = null;
+    if (el.dataset.act === 'toggle') { r = await post(API.pendToggle, { id: Number(el.dataset.id) }); avisoCalendario(r); }
+    else return;
+    cargar();  // recarga siempre: revierte el control si la regla lo rechazó
+  });
+
+  $('file-input').addEventListener('change', async ev => {
+    const files = Array.from(ev.target.files);
+    ev.target.value = '';
+    if (!files.length || !uploadEtapa) return;
+    const desc = prompt('Descripción (opcional):', '') || '';
+    const fd = new FormData();
+    fd.append('etapa_id', uploadEtapa);
+    fd.append('descripcion', desc);
+    files.forEach(f => fd.append('archivos', f));
+    toast('Subiendo…', 'info');
+    const r = await post(API.imgSubir, fd, true);
+    if (r) { toast(`${r.subidas} imagen(es) subida(s)`); }
+    cargar();
+  });
+
+  // ── Editar un pendiente ───────────────────────────────────────────────────
+  let editandoId = null;
+  function buscarPendiente(id) {
+    for (const et of DATOS.etapas) { const p = et.pendientes.find(x => x.id === id); if (p) return p; }
+    return null;
+  }
+  function abrirEditarPendiente(id) {
+    const p = buscarPendiente(id);
+    if (!p) return;
+    editandoId = id;
+    $('ep-titulo').value = p.titulo;
+    $('ep-fecha').value = p.fecha || '';
+    $('ep-hora').value = p.hora || '';
+    $('ep-resp').innerHTML = respOpciones(p.responsable_id || '', p.responsable_id ? '' : p.responsable);
+    $('ep-resp-txt').value = p.responsable_id ? '' : (p.responsable || '');
+    $('ep-resp-txt').classList.toggle('hidden', $('ep-resp').value !== '__otro');
+    $('ep-alta').checked = p.prioridad === 'A';
+    $('modal-pend').showModal();
+  }
+  $('ep-resp').addEventListener('change', () => {
+    const otro = $('ep-resp').value === '__otro';
+    $('ep-resp-txt').classList.toggle('hidden', !otro);
+    if (otro) $('ep-resp-txt').focus();
+  });
+  $('ep-ok').addEventListener('click', async () => {
+    const titulo = $('ep-titulo').value.trim();
+    if (!titulo) return toast('Escribe un título.', 'warning');
+    const r = await post(API.pendEditar, { id: editandoId, titulo,
+      fecha: $('ep-fecha').value, hora: $('ep-hora').value,
+      prioridad: $('ep-alta').checked ? 'A' : 'N',
+      ...leerResponsable($('ep-resp'), $('ep-resp-txt')) });
+    if (!r) return;
+    $('modal-pend').close();
+    avisoCalendario(r);
+    cargar();
+  });
+
+  // ── Historial: actividad automática y papelera ────────────────────────────
+  function setHistAbierto(ab) {
+    HIST.abierto = ab;
+    $('hist-cuerpo').classList.toggle('hidden', !ab);
+    $('hist-chevron').style.transform = ab ? 'rotate(180deg)' : '';
+    if (ab) cargarHist();
+  }
+  $('hist-toggle')?.addEventListener('click', () => setHistAbierto(!HIST.abierto));
+  document.querySelectorAll('[data-hist-tab]').forEach(b => b.addEventListener('click', () => {
+    HIST.tab = b.dataset.histTab;
+    document.querySelectorAll('[data-hist-tab]').forEach(x => x.classList.toggle('btn-info', x === b));
+    cargarHist();
+  }));
+
+  async function cargarHist() {
+    if (!HIST.abierto || !SEL.sitio) return;
+    const box = $('hist-lista');
+    box.innerHTML = '<span class="loading loading-spinner loading-sm"></span>';
+    const q = `?empresa=${encodeURIComponent(SEL.empresa)}&sitio=${encodeURIComponent(SEL.sitio)}`;
+    try {
+      const r = await fetch((HIST.tab === 'actividad' ? API.actividad : API.papelera) + q);
+      const d = await r.json();
+      if (!r.ok) { box.innerHTML = `<span class="text-error">${esc(d.error || 'Error')}</span>`; return; }
+      if (HIST.tab === 'actividad') {
+        box.innerHTML = d.actividad.length ? d.actividad.map(a => `
+          <div class="flex flex-wrap gap-x-2 py-1 border-b border-base-200">
+            <span class="text-xs text-base-content/50 whitespace-nowrap">${esc(fmtFechaHora(a.fecha))}</span>
+            <span class="font-medium">${esc(a.tipo_display)}</span>
+            ${a.etapa ? `<span class="badge badge-ghost badge-sm">${esc(a.etapa)}</span>` : ''}
+            <span class="flex-1 min-w-0 truncate" title="${esc(a.detalle)}">${esc(a.detalle)}</span>
+            <span class="text-xs text-base-content/60">${esc(a.usuario)}</span>
+          </div>`).join('') : '<span class="text-base-content/50">Sin movimientos todavía.</span>';
+      } else {
+        box.innerHTML = d.papelera.length ? d.papelera.map(i => `
+          <div class="flex items-center gap-2 py-1 border-b border-base-200">
+            <span class="badge badge-ghost badge-sm">${i.tipo === 'nota' ? 'Nota' : 'Pendiente'}</span>
+            <div class="flex-1 min-w-0">
+              <div class="truncate" title="${esc(i.texto)}">${esc(i.texto)}</div>
+              <div class="text-xs text-base-content/50">${esc(i.etapa)} · eliminado ${i.por ? 'por ' + esc(i.por) + ' · ' : ''}${esc(fmtFechaHora(i.fecha))}</div>
+            </div>
+            ${i.puede_restaurar ? `<button class="btn btn-ghost btn-xs" data-restaurar data-tipo="${i.tipo}" data-id="${i.id}"><i class="fa-solid fa-rotate-left"></i> Restaurar</button>` : ''}
+          </div>`).join('') : '<span class="text-base-content/50">La papelera está vacía.</span>';
+      }
+    } catch (e) { box.innerHTML = '<span class="text-error">No se pudo cargar.</span>'; }
+  }
+  $('hist-lista')?.addEventListener('click', async ev => {
+    const b = ev.target.closest('[data-restaurar]');
+    if (!b) return;
+    const r = await post(API.restaurar, { tipo: b.dataset.tipo, id: Number(b.dataset.id) });
+    if (!r) return;
+    avisoCalendario(r);
+    toast('Restaurado');
+    cargar();           // vuelve a pintar el sitio; el historial se refresca en render()
+  });
+
+  $('proyecto-estado').addEventListener('change', async ev => {
+    pintarEstado();
+    await post(API.proyectoEstado, { empresa: SEL.empresa, sitio: SEL.sitio, estado: ev.target.value });
+    cargar();
+  });
+
+  // ── Fotos de las carpetas de la etapa (miniaturas, lectura a Nextcloud bajo demanda) ─
+  const IMG_ET = {};           // codigo etapa -> { estado: 'cargando'|'ok'|'error', items, total }
+
+  const urlSitio = (o, ruta, base) =>
+    `${base}?empresa=${encodeURIComponent(SEL.empresa)}&sitio=${encodeURIComponent(SEL.sitio)}&origen=${o}&ruta=${encodeURIComponent(ruta)}`;
+
+  function imgCarpetaHtml(codigo, vacioMsg) {
+    const st = IMG_ET[codigo];
+    if (!st) return vacioMsg ? '<div class="text-sm text-base-content/50">Sin imágenes.</div>' : '';
+    if (st.estado === 'cargando') return '<span class="loading loading-spinner loading-sm"></span>';
+    if (st.estado === 'error') return '<div class="text-sm text-error">No se pudieron leer las imágenes de Nextcloud.</div>';
+    if (!st.items.length) return '<div class="text-sm text-base-content/60">No se encontraron imágenes en carpetas de fotos de esta etapa.</div>';
+    const grid = st.items.map(i => `
+      <div class="relative">
+        <img src="${urlSitio(i.origen, i.ruta, API.miniatura)}" alt="${esc(i.nombre)}" loading="lazy"
+             data-act="foto" data-url="${urlSitio(i.origen, i.ruta, API.archivo)}"
+             class="w-full h-24 object-cover rounded-lg cursor-pointer bg-base-200">
+        <div class="text-xs truncate mt-0.5" title="${esc(i.nombre)}">${esc(i.nombre)}</div>
+      </div>`).join('');
+    return `<div class="text-xs text-base-content/60 mb-1">Fotos de la carpeta · ${st.total} imagen(es)${st.total > st.items.length ? ` (se muestran ${st.items.length})` : ''}</div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">${grid}</div>`;
+  }
+
+  function pintarImg(codigo) {
+    const root = document.querySelector(`[data-codigo="${codigo}"] [data-img-root]`);
+    if (root) root.innerHTML = imgCarpetaHtml(codigo, false);
+  }
+
+  async function cargarImgCarpeta(codigo, forzar) {
+    IMG_ET[codigo] = { estado: 'cargando', items: [], total: 0 };
+    pintarImg(codigo);
+    try {
+      const q = `empresa=${encodeURIComponent(SEL.empresa)}&sitio=${encodeURIComponent(SEL.sitio)}&etapa=${codigo}` + (forzar ? '&refresh=1' : '');
+      const r = await fetch(`${API.imagenes}?${q}`);
+      const d = await r.json();
+      IMG_ET[codigo] = r.ok ? { estado: 'ok', items: d.imagenes, total: d.total } : { estado: 'error', items: [], total: 0 };
+    } catch (e) {
+      IMG_ET[codigo] = { estado: 'error', items: [], total: 0 };
+    }
+    pintarImg(codigo);
+  }
+
+  // ── Documentos de cada etapa (carpeta de la etapa dentro de la carpeta del sitio) ─
+  // Lectura a Nextcloud solo al desplegar los documentos de una card.
+  const DOCS_ET = {};          // codigo etapa -> { abierto, origen, html: {origen: html} }
+  let docsClave = '';
+  const estadoDocs = c => DOCS_ET[c] = DOCS_ET[c] || { abierto: false, origen: 'ito', html: {} };
+
+  function resetDocs() {
+    const clave = SEL.empresa + '|' + SEL.sitio;
+    if (clave === docsClave) return;
+    docsClave = clave;
+    ETAPA_SEL = null;
+    HIST.abierto = false; HIST.tab = 'actividad';
+    if (ES_SUPERUSER) {
+      $('hist-cuerpo').classList.add('hidden');
+      $('hist-chevron').style.transform = '';
+    }
+    Object.keys(UI_ET).forEach(k => delete UI_ET[k]);
+    Object.keys(DOCS_ET).forEach(k => delete DOCS_ET[k]);
+    Object.keys(IMG_ET).forEach(k => delete IMG_ET[k]);
+  }
+
+  const fmtSize = n => n == null ? '' : n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(0) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+  const fmtMtime = t => t ? new Date(t * 1000).toLocaleDateString('es-CL') : '';
+
+  function arbol(items) {
+    const raiz = { carpetas: {}, archivos: [] };
+    items.forEach(it => {
+      const partes = it.ruta.split('/');
+      let nodo = raiz;
+      for (let i = 0; i < partes.length - (it.es_dir ? 0 : 1); i++) {
+        nodo = nodo.carpetas[partes[i]] = nodo.carpetas[partes[i]] || { carpetas: {}, archivos: [] };
+      }
+      if (!it.es_dir) nodo.archivos.push(it);
+    });
+    return raiz;
+  }
+
+  // Icono por tipo de archivo (zip, Word, Excel, PowerPoint, AutoCAD, PDF, imagen).
+  const ICONO_EXT = {
+    zip: ['fa-file-zipper', '#d97706'], rar: ['fa-file-zipper', '#d97706'], '7z': ['fa-file-zipper', '#d97706'],
+    doc: ['fa-file-word', '#2b579a'], docx: ['fa-file-word', '#2b579a'], dot: ['fa-file-word', '#2b579a'], dotx: ['fa-file-word', '#2b579a'],
+    xls: ['fa-file-excel', '#217346'], xlsx: ['fa-file-excel', '#217346'], xlsm: ['fa-file-excel', '#217346'], csv: ['fa-file-excel', '#217346'],
+    ppt: ['fa-file-powerpoint', '#c43e1c'], pptx: ['fa-file-powerpoint', '#c43e1c'],
+    pdf: ['fa-file-pdf', '#d32f2f'],
+    dwg: ['fa-compass-drafting', '#0e7490'], dxf: ['fa-compass-drafting', '#0e7490'], dwf: ['fa-compass-drafting', '#0e7490'],
+    jpg: ['fa-file-image', '#7c3aed'], jpeg: ['fa-file-image', '#7c3aed'], png: ['fa-file-image', '#7c3aed'],
+    txt: ['fa-file-lines', '#6b7280'],
+  };
+  function iconoArchivo(nombre) {
+    const ext = (nombre.includes('.') ? nombre.split('.').pop() : '').toLowerCase();
+    const [cls, color] = ICONO_EXT[ext] || ['fa-file', ''];
+    return `<i class="fa-solid ${cls} fa-fw ${color ? '' : 'text-base-content/50'}" style="${color ? 'color:' + color : ''}"></i>`;
+  }
+
+  // Archivos por extensión de una carpeta, incluidas sus subcarpetas.
+  function contarPorExt(nodo, acc) {
+    acc = acc || {};
+    nodo.archivos.forEach(a => {
+      const ext = a.nombre.includes('.') ? a.nombre.split('.').pop().toLowerCase() : 'sin ext.';
+      acc[ext] = (acc[ext] || 0) + 1;
+    });
+    Object.values(nodo.carpetas).forEach(h => contarPorExt(h, acc));
+    return acc;
+  }
+  // «4 .docx · 2 .dwg»: píldora de color sólido por tipo, sin icono y con texto blanco suave.
+  function chipsExt(nodo) {
+    return Object.entries(contarPorExt(nodo)).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([ext, n]) => {
+        const color = (ICONO_EXT[ext] || [])[1] || '#6b7280';
+        const et = ext === 'sin ext.' ? ext : '.' + ext;
+        return `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] leading-none font-medium whitespace-nowrap"
+          style="background:${color};color:rgba(255,255,255,.78)">${n} ${esc(et)}</span>`;
+      }).join('');
+  }
+
+  function htmlNodo(nodo, origen, nivel) {
+    const carpetas = Object.keys(nodo.carpetas).sort((a, b) => a.localeCompare(b, 'es')).map(n => {
+      const hijo = nodo.carpetas[n];
+      return `<details ${nivel === 0 ? 'open' : ''} class="ml-${nivel ? 3 : 0}">
+        <summary class="cursor-pointer select-none py-0.5 text-xs"><span class="float-right inline-flex flex-wrap justify-end gap-1 ml-2">${chipsExt(hijo)}</span>
+          <i class="fa-regular fa-folder text-warning"></i> ${esc(n)}</summary>
+        <div class="pl-3 border-l border-base-300">${htmlNodo(hijo, origen, nivel + 1)}</div></details>`;
+    }).join('');
+    const archivos = nodo.archivos.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(a => {
+      const url = `${API.archivo}?empresa=${encodeURIComponent(SEL.empresa)}&sitio=${encodeURIComponent(SEL.sitio)}&origen=${origen}&ruta=${encodeURIComponent(a.ruta)}`;
+      return `<div class="flex items-center gap-2 text-xs py-0.5">
+        ${iconoArchivo(a.nombre)}
+        <a href="${url}" target="_blank" rel="noopener" class="truncate hover:underline" title="${esc(a.nombre)}">${esc(a.nombre)}</a>
+        <span class="text-xs text-base-content/50 ml-auto shrink-0">${esc(fmtSize(a.size))} ${esc(fmtMtime(a.mtime))}</span></div>`;
+    }).join('');
+    return carpetas + archivos;
+  }
+
+  function nombreOrigen(o) {
+    const c = (DATOS && DATOS.carpetas) || {};
+    return c[o] || (o === 'ito' ? '20-ITO INTERNO' : 'Contratista');
+  }
+
+  function docsHtml(codigo) {
+    const st = estadoDocs(codigo);
+    const btn = o => `<button type="button" class="btn btn-xs join-item ${st.origen === o ? 'btn-info' : ''}" data-act="docs-origen" data-origen="${o}">${esc(nombreOrigen(o))}</button>`;
+    return `<button type="button" class="flex items-center gap-2 w-full text-left font-semibold text-sm" data-act="docs-toggle">
+        <i class="fa-regular fa-folder-open"></i> Documentos
+        <i class="fa-solid fa-chevron-down ml-auto transition-transform" style="${st.abierto ? 'transform:rotate(180deg)' : ''}"></i>
+      </button>
+      <div class="${st.abierto ? '' : 'hidden'} mt-2">
+        <div class="join mb-2">${btn('ito')}${btn('contratista')}</div>
+        <div>${st.html[st.origen] || ''}</div>
+      </div>`;
+  }
+
+  function pintarDocs(codigo) {
+    const root = document.querySelector(`[data-codigo="${codigo}"] [data-docs-root]`);
+    if (root) root.innerHTML = docsHtml(codigo);
+  }
+
+  async function cargarDocsEtapa(codigo, origen, forzar) {
+    const st = estadoDocs(codigo);
+    st.html[origen] = '<span class="loading loading-spinner loading-sm"></span>';
+    pintarDocs(codigo);
+    let html;
+    try {
+      const q = `empresa=${encodeURIComponent(SEL.empresa)}&sitio=${encodeURIComponent(SEL.sitio)}&origen=${origen}&etapa=${codigo}` + (forzar ? '&refresh=1' : '');
+      const r = await fetch(`${API.archivos}?${q}`);
+      const d = await r.json();
+      if (!r.ok) html = `<div class="text-sm text-error">${esc(d.error || 'Error')}</div>`;
+      else if (!d.existe) html = '<div class="text-sm text-base-content/60">Este sitio no tiene carpeta en esta ubicación.</div>';
+      else if (!d.carpetas.length) html = '<div class="text-sm text-base-content/60">El sitio no tiene una carpeta para esta etapa.</div>';
+      else {
+        const refrescar = `<button type="button" class="btn btn-ghost btn-xs mb-1" data-act="docs-refresh"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+          <span class="text-xs text-base-content/50 ml-1">${d.archivos} archivo(s)</span>`;
+        html = refrescar + (d.items.length ? htmlNodo(arbol(d.items), origen, 0) : '') +
+          (d.truncado ? '<div class="text-xs text-warning mt-1">Lista parcial: demasiados elementos.</div>' : '');
+      }
+    } catch (e) {
+      html = '<div class="text-sm text-error">No se pudo leer Nextcloud.</div>';
+    }
+    st.html[origen] = html;
+    pintarDocs(codigo);
+  }
+
+  function docsAccion(act, codigo, el) {
+    const st = estadoDocs(codigo);
+    if (act === 'docs-toggle') {
+      st.abierto = !st.abierto;
+      if (st.abierto && !st.html[st.origen]) cargarDocsEtapa(codigo, st.origen, false);
+      else pintarDocs(codigo);
+    } else if (act === 'docs-origen') {
+      st.origen = el.dataset.origen;
+      if (!st.html[st.origen]) cargarDocsEtapa(codigo, st.origen, false);
+      else pintarDocs(codigo);
+    } else if (act === 'docs-refresh') {
+      cargarDocsEtapa(codigo, st.origen, true);
+    }
+  }
+
+  if (ES_SUPERUSER) {
+    $('btn-itos').addEventListener('click', async () => {
+      $('itos-lista').innerHTML = '<span class="loading loading-spinner loading-sm"></span>';
+      $('modal-itos').showModal();
+      try {
+        const r = await fetch(`${API.itos}?empresa=${encodeURIComponent(SEL.empresa)}&sitio=${encodeURIComponent(SEL.sitio)}`);
+        const d = await r.json();
+        if (!r.ok) { $('itos-lista').innerHTML = `<span class="text-error text-sm">${esc(d.error || 'Error')}</span>`; return; }
+        $('itos-lista').innerHTML = d.candidatos.length
+          ? d.candidatos.map(c => `
+            <label class="flex items-center gap-2 cursor-pointer py-0.5">
+              <input type="checkbox" class="checkbox checkbox-sm checkbox-info" value="${c.id}" ${c.asignado ? 'checked' : ''}>
+              <span>${esc(c.nombre)} <span class="text-xs text-base-content/50">${esc(c.email)}</span></span>
+            </label>`).join('')
+          : '<span class="text-sm text-base-content/60">No hay usuarios con rol ITO o ITO HSE.</span>';
+      } catch (e) { $('itos-lista').innerHTML = '<span class="text-error text-sm">No se pudo cargar.</span>'; }
+    });
+    $('itos-ok').addEventListener('click', async () => {
+      const ids = [...$('itos-lista').querySelectorAll('input:checked')].map(i => Number(i.value));
+      const r = await post(API.itosGuardar, { empresa: SEL.empresa, sitio: SEL.sitio, ids });
+      if (!r) return;
+      $('modal-itos').close();
+      DATOS.itos = r.itos;
+      renderItos();
+      toast('ITOs actualizados');
+    });
+  }
+
+  proyectoSel.addEventListener('change', () => {
+    // Ojo: Number('') === 0 elegiría el primer proyecto al volver a «Selecciona un sitio…».
+    seleccionar(proyectoSel.value === '' ? null : (PROYECTOS[Number(proyectoSel.value)] || null));
+  });
+
+  if (ES_SUPERUSER) {
+    // Quitar de seguimiento (conserva los datos del sitio).
+    $('btn-quitar').addEventListener('click', async () => {
+      document.activeElement && document.activeElement.blur();
+      if (!confirm('¿Quitar este sitio de Seguimiento? Sus datos se conservan.')) return;
+      const r = await post(API.habilitar, { empresa: SEL.empresa, sitio: SEL.sitio, activo: false });
+      if (!r) return;
+      lsSet(K_SEL, 'null');
+      cargarProyectos(null);
+    });
+
+    // Agregar un sitio nuevo: elegir empresa + carpeta de Nextcloud aún no habilitada.
+    const addEmp = $('add-empresa'), addSit = $('add-sitio'), addOk = $('add-ok');
+    async function cargarSitiosNC() {
+      addSit.innerHTML = '<option value="">Cargando…</option>'; addOk.disabled = true;
+      try {
+        const r = await fetch(API_SITIOS + '?empresa=' + encodeURIComponent(addEmp.value));
+        const ya = new Set(PROYECTOS.filter(p => p.empresa === addEmp.value).map(p => p.sitio));
+        const sitios = ((await r.json()).sitios || []).filter(s => !ya.has(s));
+        addSit.innerHTML = sitios.length
+          ? '<option value="">Selecciona un sitio…</option>' + sitios.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')
+          : '<option value="">No hay sitios disponibles</option>';
+      } catch (e) { addSit.innerHTML = '<option value="">No se pudieron cargar los sitios</option>'; }
+    }
+    $('btn-agregar').addEventListener('click', () => {
+      document.activeElement && document.activeElement.blur();
+      $('modal-agregar').showModal(); cargarSitiosNC();
+    });
+    addEmp.addEventListener('change', cargarSitiosNC);
+    addSit.addEventListener('change', () => { addOk.disabled = !addSit.value; });
+    addOk.addEventListener('click', async () => {
+      const empresa = addEmp.value, sitio = addSit.value;
+      if (!sitio) return;
+      addOk.disabled = true;
+      const r = await post(API.habilitar, { empresa, sitio, activo: true });
+      if (!r) { addOk.disabled = false; return; }
+      $('modal-agregar').close();
+      toast('Sitio agregado a seguimiento');
+      await cargarProyectos({ empresa, sitio });
+    });
+  }
+
+  cargarProyectos(null);
+})();
+</script>
+{% endblock %}
+
+{% block footer %}
+{% include "footer.html" %}
+{% endblock %}
