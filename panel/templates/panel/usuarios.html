@@ -11,6 +11,25 @@
   <a href="{% url 'panel:usuario_crear' %}" class="btn btn-info btn-sm">Nuevo usuario</a>
 </div>
 
+<form method="post" action="{% url 'panel:roles_responsables' %}" class="card bg-base-100 border border-base-300 shadow-xs mb-4">
+  {% csrf_token %}
+  <div class="card-body p-4 gap-2">
+    <div>
+      <h2 class="font-semibold">Responsables de pendientes</h2>
+      <p class="text-xs text-base-content/60">Roles cuyos usuarios se pueden elegir como responsable de un pendiente en Seguimiento (siempre se puede escribir un nombre a mano).</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+      {% for r in roles_responsables %}
+      <label class="flex items-center gap-2 cursor-pointer text-sm">
+        <input type="checkbox" name="rol" value="{{ r.rol }}" class="checkbox checkbox-sm" {% if r.activo %}checked{% endif %}>
+        {{ r.nombre }}
+      </label>
+      {% endfor %}
+      <button type="submit" class="btn btn-info btn-sm ml-auto">Guardar</button>
+    </div>
+  </div>
+</form>
+
 <div class="card bg-base-100 border border-base-300 shadow-xs">
   <div class="overflow-x-auto">
     <table class="table">

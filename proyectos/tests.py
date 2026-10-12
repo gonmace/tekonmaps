@@ -585,9 +585,44 @@ class ResponsableYEdicionTests(ProyectosBase):
         self.assertIsNone(p.responsable_user)
         self.assertEqual(p.responsable, "Contratista externo")
 
-    def test_usuario_no_elegible_cae_a_texto(self):
-        otro = User.objects.create_user("otro", password="x")
-        UserProfile.objects.create(user=otro, rol="rol_ito")      # sin acceso al sitio
+    def _responsable_con_rol(self, rol, i=0):
+        otro = User.objects.create_user(f"otro{rol}{i}", password="x")
+        UserProfile.objects.create(user=otro, rol=rol)          # sin acceso al sitio
+        self.crear(responsable_id=otro.pk, responsable="Texto", titulo=f"T{rol}{i}")
+        return Pendiente.objects.get(titulo=f"T{rol}{i}"), otro
+
+    def test_responsable_de_cualquier_rol_salvo_visitante_y_tk_redline(self):
+        for rol in ["rol_buscador", "rol_constructor", "rol_ito", "rol_ito_hse",
+                    "rol_esp_electrico", "rol_coordinador"]:
+            p, otro = self._responsable_con_rol(rol)
+            self.assertEqual(p.responsable_user, otro, rol)
+        for rol in ["visitante", "rol_tk_redline"]:
+            p, _otro = self._responsable_con_rol(rol)
+            self.assertIsNone(p.responsable_user, rol)
+            self.assertEqual(p.responsable, "Texto")
+
+    @override_settings(STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+    def test_panel_cambia_roles_elegibles(self):
+        from docs.models import RolConfig
+        su = User.objects.create_superuser("root", "r@x.cl", "x")
+        self.client.force_login(su)
+        self.assertContains(self.client.get(reverse("panel:usuarios")), "Responsables de pendientes")
+        r = self.client.post(reverse("panel:roles_responsables"),
+                             {"rol": ["rol_ito", "rol_tk_redline"]})
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(RolConfig.objects.get(rol="rol_tk_redline").responsable_pendientes)
+        self.assertFalse(RolConfig.objects.get(rol="rol_constructor").responsable_pendientes)
+        self.client.force_login(self.u)
+        p, otro = self._responsable_con_rol("rol_tk_redline")
+        self.assertEqual(p.responsable_user, otro)
+        p, _o = self._responsable_con_rol("rol_constructor")
+        self.assertIsNone(p.responsable_user)
+
+    def test_usuario_inactivo_no_elegible_cae_a_texto(self):
+        otro = User.objects.create_user("inactivo", password="x", is_active=False)
+        UserProfile.objects.create(user=otro, rol="rol_ito")
         self.crear(responsable_id=otro.pk, responsable="Pedro")
         p = Pendiente.objects.get()
         self.assertIsNone(p.responsable_user)

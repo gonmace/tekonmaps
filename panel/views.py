@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 
 from django.conf import settings
 
@@ -19,6 +20,7 @@ from docs.models import (
     PlantillaEstructura,
     ProyectoFinalCache,
     ROLES_TODO_SITIO,
+    RolConfig,
     SeguimientoCache,
     SiteConfig,
     SitioCache,
@@ -547,7 +549,26 @@ def usuarios(request):
         'titulo_pagina': 'Panel · Usuarios',
         'seccion': 'usuarios',
         'usuarios': rows,
+        'roles_responsables': _roles_responsables(),
     })
+
+
+def _roles_responsables():
+    """``[{rol, nombre, activo}]``: qué roles se ofrecen como responsable de pendientes."""
+    off = set(RolConfig.objects.filter(responsable_pendientes=False).values_list('rol', flat=True))
+    return [{'rol': r, 'nombre': n, 'activo': r not in off} for r, n in UserProfile.ROL_CHOICES]
+
+
+@superuser_required
+@require_POST
+def roles_responsables(request):
+    """Guarda qué roles pueden ser responsables de un pendiente (casillas ``rol``)."""
+    marcados = set(request.POST.getlist('rol'))
+    for rol, _n in UserProfile.ROL_CHOICES:
+        RolConfig.objects.update_or_create(
+            rol=rol, defaults={'responsable_pendientes': rol in marcados})
+    messages.success(request, 'Roles elegibles como responsable de pendientes actualizados.')
+    return redirect('panel:usuarios')
 
 
 def _enviar_invitacion(request, u):

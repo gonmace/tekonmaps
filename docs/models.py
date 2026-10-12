@@ -109,6 +109,22 @@ class UserProfile(models.Model):
         return f"{self.user.username} ({self.get_rol_display()})"
 
 
+class RolConfig(models.Model):
+    """Ajustes por rol editables en Panel → Usuarios. Sin fila para un rol = valores por
+    defecto (elegible). Hoy: si los usuarios de ese rol se ofrecen como responsable de
+    un pendiente (``proyectos``)."""
+    rol = models.CharField(max_length=20, unique=True, choices=UserProfile.ROL_CHOICES)
+    responsable_pendientes = models.BooleanField(
+        "Puede ser responsable de pendientes", default=True)
+
+    class Meta:
+        verbose_name = "Configuración de rol"
+        verbose_name_plural = "Configuración de roles"
+
+    def __str__(self):
+        return f"{self.get_rol_display()}: responsable={self.responsable_pendientes}"
+
+
 class AccesoSitio(models.Model):
     """Sitios (carpetas de Nextcloud) a los que un usuario tiene acceso.
 

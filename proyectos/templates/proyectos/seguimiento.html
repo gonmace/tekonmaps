@@ -488,7 +488,7 @@
         }).join('')}</ul></div></div>`;
   }
 
-  // Responsable: elegir un usuario del sitio o escribir un nombre a mano («Otro nombre…»).
+  // Responsable: elegir cualquier usuario activo o escribir un nombre a mano («Otro nombre…»).
   function respOpciones(sel, texto) {
     const usuarios = (DATOS && DATOS.responsables) || [];
     const conocido = sel && usuarios.some(r => String(r.id) === String(sel));

@@ -110,16 +110,23 @@ def registrar(proyecto, tipo, detalle="", usuario=None, etapa=None):
         pass
 
 
-def responsables_posibles(empresa, sitio):
-    """Usuarios que se pueden elegir como responsable de un pendiente del sitio: los ITO
-    asignados más los roles que ven todos los sitios (Coordinador, TK Redline)."""
+def responsables_posibles():
+    """Usuarios que se pueden elegir como responsable de un pendiente: activos, de los roles
+    marcados en Panel → Usuarios (``RolConfig.responsable_pendientes``; por defecto todos
+    menos Visitante y TK Redline), con o sin sitio asignado. Sin superusuarios (no tienen
+    función en la obra)."""
     from django.contrib.auth.models import User
     from django.db.models import Q
-    from docs.models import ROLES_TODO_SITIO
-    asignados = AccesoSitio.objects.filter(empresa=empresa, sitio=sitio).values_list("user_id", flat=True)
-    return (User.objects.filter(is_active=True, is_superuser=False)
-            .filter(Q(pk__in=asignados) | Q(profile__rol__in=ROLES_TODO_SITIO))
-            .order_by("first_name", "username").distinct())
+    from docs.models import RolConfig
+    excluidos = set(RolConfig.objects.filter(responsable_pendientes=False)
+                    .values_list("rol", flat=True))
+    qs = User.objects.filter(is_active=True, is_superuser=False)
+    if excluidos:
+        malos = Q(profile__rol__in=excluidos)
+        if "visitante" in excluidos:        # sin perfil = visitante (rol por defecto)
+            malos |= Q(profile__isnull=True)
+        qs = qs.exclude(malos)
+    return qs.order_by("first_name", "username")
 
 
 def itos_asignados(empresa, sitio):

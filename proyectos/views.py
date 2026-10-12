@@ -116,7 +116,7 @@ def _serializar(proyecto, user):
                  for u in servicios.itos_asignados(proyecto.empresa, proyecto.sitio)],
         # Usuarios elegibles como responsable de un pendiente (además del texto libre).
         "responsables": [{"id": u.pk, "nombre": servicios.nombre_usuario(u)}
-                         for u in servicios.responsables_posibles(proyecto.empresa, proyecto.sitio)],
+                         for u in servicios.responsables_posibles()],
         "actualizado": proyecto.actualizado.isoformat(), "etapas": etapas,
     }
 
@@ -585,7 +585,7 @@ def _responsable(d, proyecto):
     (``responsable_id``) o un nombre escrito a mano (``responsable``)."""
     rid = d.get("responsable_id")
     if rid not in (None, "", 0) and str(rid).isdigit():
-        u = servicios.responsables_posibles(proyecto.empresa, proyecto.sitio).filter(pk=int(rid)).first()
+        u = servicios.responsables_posibles().filter(pk=int(rid)).first()
         if u:
             return u, servicios.nombre_usuario(u)[:100]
     return None, (d.get("responsable") or "").strip()[:100]

@@ -115,8 +115,9 @@ CSS: `cd theme/static_src && npm run build` (o `npm run start` para watch). Sali
   **Dictado por voz** en la Bitácora: mantener Espacio en el cuadro de nota usa la
   Web Speech API del navegador (`es-CL`, solo frontend); deja el texto en el textarea, no auto-envía.
   **Extras de `proyectos`:** tablero (`proyectos:tablero`, panorama de todos los sitios visibles con
-  vencidos/próximo/última nota y filtros); pendientes editables con **responsable = usuario del
-  sitio o texto libre** (`responsable_user`/`responsable`) y **prioridad** Alta/Normal; **borrado
+  vencidos/próximo/última nota y filtros); pendientes editables con **responsable = cualquier usuario
+  activo de los roles marcados en Panel → Usuarios, con o sin sitio asignado (`RolConfig`;
+  por defecto todos menos Visitante y TK Redline), o texto libre** (`responsable_user`/`responsable`) y **prioridad** Alta/Normal; **borrado
   lógico** de pendientes y notas (`eliminado_en`, restaurables desde la «Papelera» del Historial);
   `Actividad` = registro automático de cambios (`servicios.registrar`); y el comando
   `python manage.py enviar_recordatorios [--dias N] [--dry-run]` (cron diario) que manda a cada

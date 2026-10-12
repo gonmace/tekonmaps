@@ -39,6 +39,7 @@ urlpatterns = [
 
 
     path('usuarios/', views.usuarios, name='usuarios'),
+    path('usuarios/roles-responsables/', views.roles_responsables, name='roles_responsables'),
     path('usuarios/nuevo/', views.usuario_crear, name='usuario_crear'),
     path('usuarios/<int:pk>/', views.usuario_editar, name='usuario_editar'),
     path('usuarios/<int:pk>/toggle/', views.usuario_toggle_activo, name='usuario_toggle_activo'),
