@@ -24,7 +24,7 @@ except Exception:
 fi
 
 echo 'Recopilando archivos estáticos...'
-python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput || { echo 'ERROR: collectstatic falló'; exit 1; }
 chmod -R o+rX /app/staticfiles
 
 echo 'Ejecutando migraciones...'

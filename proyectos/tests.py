@@ -778,6 +778,25 @@ class RecordatoriosTests(ProyectosBase):
         self.assertEqual(len(self.correr()), 1)
 
 
+class EstaticosTests(TestCase):
+    """Producción usa ManifestStaticFilesStorage: si algún archivo referenciado falta
+    (p. ej. un ``sourceMappingURL`` a un .map que no se copió), ``collectstatic`` falla,
+    el manifiesto no se regenera y la página da 500 «Missing staticfiles manifest entry»."""
+
+    def test_collectstatic_incluye_leaflet_de_proyectos(self):
+        import json
+        import os
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp(prefix="collect_")
+        self.addCleanup(shutil.rmtree, d, True)
+        with override_settings(STATIC_ROOT=d, DEBUG=False):
+            call_command("collectstatic", interactive=False, verbosity=0)
+        paths = json.load(open(os.path.join(d, "staticfiles.json")))["paths"]
+        for nombre in ("proyectos/leaflet/leaflet.css", "proyectos/leaflet/leaflet.js"):
+            self.assertIn(nombre, paths)
+
+
 class PanelToggleTests(ProyectosBase):
     def test_toggle_proyectos(self):
         self.client.force_login(self.sup)
