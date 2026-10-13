@@ -111,7 +111,8 @@ CSS: `cd theme/static_src && npm run build` (o `npm run start` para watch). Sali
   proxy `proyectos:imagen_ver` (sin MEDIA/Pillow). Acceso: flag `UserProfile.acceso_proyectos`
   (toggle «Seguimiento» en Panel → Usuarios); lecturas exigen sección + `AccesoSitio`, escrituras
   además `_es_admin`; borrar notas/fotos = autor o coordinador/superusuario. El selector
-  empresa→sitio reusa `docs:api_sitios` (sin `sinc=1`).
+  empresa→sitio reusa `docs:api_sitios` (sin `sinc=1`). **Agregar un sitio a Seguimiento**
+  (`api_proyecto_habilitar`, `activo=true`): superusuario o coordinador; **quitarlo**: solo superusuario.
   **Dictado por voz** en la Bitácora: mantener Espacio en el cuadro de nota usa la
   Web Speech API del navegador (`es-CL`, solo frontend); deja el texto en el textarea, no auto-envía.
   **Extras de `proyectos`:** tablero (`proyectos:tablero`, panorama de todos los sitios visibles con

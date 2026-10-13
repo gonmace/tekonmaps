@@ -78,7 +78,7 @@ def _serializar(proyecto, user):
           .prefetch_related(
               Prefetch("pendientes", queryset=Pendiente.objects.filter(eliminado_en__isnull=True)
                        .select_related("responsable_user")),
-              "imagenes",
+              Prefetch("imagenes", queryset=Imagen.objects.select_related("subido_por")),
               Prefetch("notas", queryset=Nota.objects.filter(eliminado_en__isnull=True)
                        .select_related("usuario")))
           .select_related("actualizado_por"))
@@ -96,12 +96,12 @@ def _serializar(proyecto, user):
             "imagenes": [{
                 "id": i.pk, "url": reverse("proyectos:imagen_ver", args=[i.pk]),
                 "descripcion": i.descripcion, "fecha": i.fecha.isoformat(),
-                "usuario": i.subido_por.username if i.subido_por else "",
+                "usuario": servicios.nombre_usuario(i.subido_por) if i.subido_por else "",
                 "puede_borrar": _puede_borrar(user, i.subido_por_id),
             } for i in e.imagenes.all()],
             "notas": [{
                 "id": n.pk, "texto": n.texto, "fecha": n.fecha.isoformat(),
-                "usuario": n.usuario.username if n.usuario else "",
+                "usuario": servicios.nombre_usuario(n.usuario) if n.usuario else "",
                 "puede_borrar": _puede_borrar(user, n.usuario_id),
             } for n in e.notas.all()],
         })
@@ -147,6 +147,7 @@ def index(request):
         "empresas": empresas,
         "es_admin": _es_admin(request.user),
         "es_superuser": request.user.is_superuser,
+        "puede_agregar": _es_coordinador(request.user),   # agregar sitios a seguimiento
         "puede_estado": _puede_cambiar_estado(request.user),
         "estados_proyecto": ESTADO_PROYECTO,
     })
@@ -256,15 +257,23 @@ def api_habilitados(request):
 @login_required
 @require_POST
 def api_proyecto_habilitar(request):
-    """Check de «en seguimiento». Solo superusuario (como la sincronización de sitios)."""
-    if not request.user.is_superuser:
-        return _err("Solo el superusuario puede habilitar proyectos.", 403)
+    """Check de «en seguimiento». Agregar un sitio (``activo=true``): superusuario o
+    coordinador; quitarlo (``activo=false``): solo superusuario."""
     d = _body(request)
+    activo = bool(d.get("activo"))
+    if not request.user.is_superuser:
+        if not (activo and _es_coordinador(request.user)):
+            return _err("Solo el superusuario puede quitar sitios de seguimiento."
+                        if _es_coordinador(request.user)
+                        else "Solo el superusuario o un coordinador pueden agregar sitios.", 403)
+        denied = _gate_api(request.user, SECCION)
+        if denied:
+            return denied
     empresa, sitio = (d.get("empresa") or "").strip(), (d.get("sitio") or "").strip()
     if not empresa or not sitio:
         return _err("Faltan empresa/sitio.")
     proyecto = servicios.obtener_proyecto(empresa, sitio)
-    proyecto.activo = bool(d.get("activo"))
+    proyecto.activo = activo
     proyecto.actualizado_por = request.user
     proyecto.save()
     servicios.registrar(proyecto, "seguimiento",

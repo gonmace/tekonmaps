@@ -78,6 +78,40 @@ class HabilitarTests(ProyectosBase):
         self.assertTrue(Proyecto.objects.get(sitio="S1").activo)
         self.assertEqual(Proyecto.objects.get(sitio="S1").etapas.count(), 2)
 
+    def test_coordinador_agrega_pero_no_quita(self):
+        coord = User.objects.create_user("coord", password="x")
+        UserProfile.objects.create(user=coord, rol="rol_coordinador", acceso_proyectos=True)
+        self.client.force_login(coord)
+        alta = {"empresa": "AJ", "sitio": "S9", "activo": True}
+        self.assertEqual(self.post("api_proyecto_habilitar", alta).status_code, 200)
+        self.assertTrue(Proyecto.objects.get(sitio="S9").activo)
+        baja = {"empresa": "AJ", "sitio": "S9", "activo": False}
+        self.assertEqual(self.post("api_proyecto_habilitar", baja).status_code, 403)
+        self.assertTrue(Proyecto.objects.get(sitio="S9").activo)
+
+    def test_coordinador_sin_seccion_no_agrega(self):
+        coord = User.objects.create_user("coord2", password="x")
+        UserProfile.objects.create(user=coord, rol="rol_coordinador", acceso_proyectos=False)
+        self.client.force_login(coord)
+        r = self.post("api_proyecto_habilitar", {"empresa": "AJ", "sitio": "S9", "activo": True})
+        self.assertEqual(r.status_code, 403)
+
+    @override_settings(STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+    def test_boton_agregar_solo_para_coordinador_y_superusuario(self):
+        coord = User.objects.create_user("coord3", password="x")
+        UserProfile.objects.create(user=coord, rol="rol_coordinador", acceso_proyectos=True)
+        url = reverse("proyectos:index")
+        self.assertNotIn('id="btn-agregar"', self.client.get(url).content.decode())   # ITO
+        self.client.force_login(coord)
+        html = self.client.get(url).content.decode()
+        self.assertIn('id="btn-agregar"', html)
+        self.assertIn('id="modal-agregar"', html)
+        self.assertNotIn('id="btn-quitar"', html)                                      # solo superusuario
+        self.client.force_login(self.sup)
+        self.assertIn('id="btn-quitar"', self.client.get(url).content.decode())
+
     def test_listado_habilitados_filtra_por_acceso(self):
         self.proyecto("S1")
         self.proyecto("S2")
@@ -578,6 +612,15 @@ class ResponsableYEdicionTests(ProyectosBase):
         pend = [x for e in d["etapas"] for x in e["pendientes"]][0]
         self.assertEqual(pend["responsable_id"], self.u.pk)
         self.assertIn({"id": self.u.pk, "nombre": "ito"}, d["responsables"])
+
+    def test_nota_muestra_nombre_y_no_el_correo(self):
+        self.u.first_name = "Ana Pérez"
+        self.u.username = self.u.email = "ana@tekon-rl.cl"
+        self.u.save()
+        self.post("api_nota_crear", {"etapa_id": self.e.pk, "texto": "Hola"})
+        d = self.client.get(reverse("proyectos:api_proyecto"), {"empresa": "AJ", "sitio": "S1"}).json()
+        notas = [n for e in d["etapas"] for n in e["notas"]]
+        self.assertEqual(notas[0]["usuario"], "Ana Pérez")
 
     def test_responsable_texto_libre(self):
         self.crear(responsable="Contratista externo")

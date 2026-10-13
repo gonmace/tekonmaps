@@ -74,11 +74,13 @@
     <a href="{% url 'proyectos:tablero' %}" class="btn btn-ghost btn-sm sm:ml-auto" title="Panorama de todos los sitios">
       <i class="fa-solid fa-table-list"></i> Tablero
     </a>
-    <div class="dropdown dropdown-end">
+    {% endif %}
+    {% if puede_agregar %}
+    <div class="dropdown dropdown-end {% if not es_superuser %}sm:ml-auto{% endif %}">
       <div tabindex="0" role="button" class="btn btn-ghost btn-sm" title="Administrar"><i class="fa-solid fa-gear"></i></div>
       <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[50] w-60 p-2 shadow border border-base-300">
         <li><button id="btn-agregar" type="button"><i class="fa-solid fa-plus"></i> Agregar sitio</button></li>
-        <li id="item-quitar" class="hidden"><button id="btn-quitar" type="button"><i class="fa-solid fa-circle-minus"></i> Quitar de seguimiento</button></li>
+        {% if es_superuser %}<li id="item-quitar" class="hidden"><button id="btn-quitar" type="button"><i class="fa-solid fa-circle-minus"></i> Quitar de seguimiento</button></li>{% endif %}
       </ul>
     </div>
     {% endif %}
@@ -98,6 +100,9 @@
     <form method="dialog" class="modal-backdrop"><button>cerrar</button></form>
   </dialog>
 
+  {% endif %}
+
+  {% if puede_agregar %}
   <dialog id="modal-agregar" class="modal">
     <div class="modal-box">
       <h3 class="font-bold text-lg">Agregar sitio a seguimiento</h3>
@@ -236,6 +241,7 @@
   };
   const ES_ADMIN = {{ es_admin|yesno:"true,false" }};
   const ES_SUPERUSER = {{ es_superuser|yesno:"true,false" }};
+  const PUEDE_AGREGAR = {{ puede_agregar|yesno:"true,false" }};   // superusuario o coordinador
   const CSRF = '{{ csrf_token }}';
   const K_SEL = 'proy_sel';
 
@@ -336,7 +342,7 @@
       PROYECTOS.map((p, i) => `<option value="${i}">${esc(p.empresa_display)} · ${esc(p.sitio)}</option>`).join('');
     $('placeholder-msg').textContent = PROYECTOS.length
       ? 'Selecciona un sitio para ver su seguimiento.'
-      : 'Aún no hay sitios en seguimiento.' + (ES_SUPERUSER ? ' Usa «Agregar sitio» para empezar.' : '');
+      : 'Aún no hay sitios en seguimiento.' + (PUEDE_AGREGAR ? ' Usa «Agregar sitio» para empezar.' : '');
     let pref = preferido;
     if (!pref) {
       const q = new URLSearchParams(location.search);
@@ -1297,7 +1303,9 @@
       lsSet(K_SEL, 'null');
       cargarProyectos(null);
     });
+  }
 
+  if (PUEDE_AGREGAR) {
     // Agregar un sitio nuevo: elegir empresa + carpeta de Nextcloud aún no habilitada.
     const addEmp = $('add-empresa'), addSit = $('add-sitio'), addOk = $('add-ok');
     async function cargarSitiosNC() {
